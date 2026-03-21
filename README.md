@@ -406,10 +406,10 @@ Field operation was conducted in **Always-On mode** to measure system stability 
 
 | Component | State | Current Draw (avg.) |
 |---|---|---|
-| ESP32-S3 | Active (WiFi mode on) | ~80–100 mA |
+| ESP32-DevKit V4 | Active (WiFi mode on) | ~70-90 mA |
 | HC-SR04 | Continuous measurement | ~15 mA |
-| SD card write | Active | ~20–30 mA |
-| **Total** | **Always-On** | **~130–150 mA** |
+| MT3608 Regulator | Loses | ~5-10 mA |
+| **Total** | **Always-On** | **~90-115 mA** |
 
 **Measured runtime:** 10–12 hours on 3.7V 1800 mAh Li-Po with MT3608 boost converter, under continuous sampling and logging.
 
