@@ -1,29 +1,30 @@
 # Devre Şemaları ve Bağlantı Tabloları
+# Circuit Diagrams and Connection Tables
 
-*(Kablolama diyagramları `docs/sistem_semasi.png` içerisinde gösterilmektedir.)*
+*(Wiring diagrams are shown in `docs/sistem_semasi.png`.)*
 
-## 1. Merkez ESP32 Bağlantı Şeması ve Pin Diyagramı
+## 1. Central ESP32 Connection Diagram and Pin Configuration
 
-| SD Kart Modülü | Merkez ESP32 S3 Pin (GPIO) | Not |
+| SD Card Module | Central ESP32 S3 Pin (GPIO) | Note |
 |---|---|---|
-| GND | GND | Şase |
-| VCC | 5V | Güç |
-| MISO | GPIO 19 | Veri Girişi |
-| MOSI | GPIO 23 | Veri Çıkışı |
-| SCK | GPIO 18 | Saat Sinyali |
+| GND | GND | Ground |
+| VCC | 5V | Power |
+| MISO | GPIO 19 | Data Input |
+| MOSI | GPIO 23 | Data Output |
+| SCK | GPIO 18 | Clock Signal |
 | CS | GPIO 5 | Chip Select |
 
 ---
 
-## 2. Sensör Düğümü (Node) Bağlantı Şeması ve Pin Diyagramı
+## 2. Sensor Node Connection Diagram and Pin Configuration
 
-| Komponent 1 Ucu | Komponent 2 Ucu | Fonksiyon / Not |
+| Component 1 End | Component 2 End | Function / Note |
 |---|---|---|
-| Pil (+) | TP4056 (B+) | Pil girişi |
-| Pil (-) | TP4056 (B-) | Pil girişi |
-| TP4056 (OUT+) | Boost Converter (VIN+) | Şarj modülünden regülatöre |
-| Boost Converter (5V Out) | ESP32 (5V / VIN) | Ana güç girişi |
-| Boost Converter (5V Out) | HC-SR04 (VCC) | Sensör güç girişi |
-| HC-SR04 (Trig) | ESP32 (GPIO 5) | Tetikleme sinyali |
-| HC-SR04 (Echo) | Gerilim Bölücü -> ESP32 (GPIO 18) | Voltaj Düşürme |
-| Ortak Şase (GND) | Tüm bileşenlerin GND uçları | Şase |
+| Battery (+) | TP4056 (B+) | Battery input |
+| Battery (-) | TP4056 (B-) | Battery input |
+| TP4056 (OUT+) | Boost Converter (VIN+) | From charger module to regulator |
+| Boost Converter (5V Out) | ESP32 (5V / VIN) | Main power input |
+| Boost Converter (5V Out) | HC-SR04 (VCC) | Sensor power input |
+| HC-SR04 (Trig) | ESP32 (GPIO 5) | Trigger signal |
+| HC-SR04 (Echo) | Voltage Divider -> ESP32 (GPIO 18) | Voltage Reduction |
+| Common Ground (GND) | GND pins of all components | Ground |
