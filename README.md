@@ -441,7 +441,7 @@ Field operation was conducted in **Always-On mode** to measure system stability 
 
 ## 12. Conclusion
 
-TAŞKIN demonstrates that a sub-$30 per-node sensor system can produce statistically differentiated, multi-point fill rate data suitable for infrastructure risk prioritization. The composite TRİ metric enables location ranking across multiple parameters — not just peak fill values.
+TAŞKIN demonstrates that a sub-$10 per-node sensor system can produce statistically differentiated, multi-point fill rate data suitable for infrastructure risk prioritization. The composite TRİ metric enables location ranking across multiple parameters — not just peak fill values.
 
 The system correctly identified Node 1 (Barajyolu underpass) as the highest-risk location across all measured parameters, consistent with known local flooding history. Node 3 (Sinanpaşa, reference) showed stable low fill throughout all sessions, validating the comparative measurement design.
 
