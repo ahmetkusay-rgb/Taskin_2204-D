@@ -437,7 +437,7 @@ Saha testleri aşamasında sistemin kararlılığını ve veri sürekliliğini �
 
 ## 12. Sonuç
 
-TAŞKIN, düğüm başına 30 dolar altı maliyetle altyapı risk önceliklendirmesine uygun, istatistiksel açıdan farklılaştırılmış çok noktalı doluluk verisi üretebildiğini göstermektedir. Bileşik TRİ metriği, konumları yalnızca anlık tepe değerleriyle değil; birden fazla parametre üzerinden sıralamayı mümkün kılmaktadır.
+TAŞKIN, düğüm başına 10 dolar altı maliyetle altyapı risk önceliklendirmesine uygun, istatistiksel açıdan farklılaştırılmış çok noktalı doluluk verisi üretebildiğini göstermektedir. Bileşik TRİ metriği, konumları yalnızca anlık tepe değerleriyle değil; birden fazla parametre üzerinden sıralamayı mümkün kılmaktadır.
 
 Sistem, Düğüm 1'i (Barajyolu alt geçidi) tüm ölçülen parametreler açısından en yüksek riskli konum olarak doğru biçimde belirlemiştir — bu sonuç, bilinen yerel taşkın geçmişiyle örtüşmektedir. Referans düğüm olan Düğüm 3 (Sinanpaşa), tüm oturumlarda kararlı ve düşük doluluk sergileyerek karşılaştırmalı ölçüm tasarımını doğrulamıştır.
 
