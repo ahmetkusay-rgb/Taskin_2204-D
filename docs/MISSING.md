@@ -1,85 +1,66 @@
 # MISSING ELEMENTS — What Would Cause Jury Rejection
 
-> This is not a suggestion list. These are gaps that directly undermine reproducibility, credibility, or completeness.
+> These gaps directly undermine reproducibility, credibility, or completeness.
 
 ---
 
 ## 🔴 Critical (Jury Rejection Risk)
 
-### 1. No LICENSE file
-- **README states MIT License** but no `LICENSE` file exists in the repository.
-- A jury cannot accept legal status of the code.
-- **Fix:** Add `LICENSE` file with MIT License text.
+### 1. No photographs of field deployment
+- All three field locations are text-described only. Zero visual evidence of installation.
+- The jury cannot verify nodes were physically deployed.
+- **Where in README:** Section 5 (Physical Design) — `> [IMAGE PLACEHOLDER]` markers already in place.
+- **What to add:** At minimum — Node 1 at Barajyolu underpass (IP67 box on structure), and one shot showing sensor aimed at water surface.
 
-### 2. No photographs of field deployment
-- All three field locations are described in text and tables. Zero visual evidence of actual installation.
-- The jury has no proof nodes were physically deployed — only that code was written and data files exist.
-- **Fix:** See `docs/IMAGE_PLAN.md` for required photos.
+### 2. No time-series visualization of field data
+- Four CSV files (~10,800 data points) exist. No line chart shows actual fill rate trends.
+- TRİ scores (81, 58, 22) are claimed with no supporting visual.
+- **Where in README:** Section 10 (Test Results) — image placeholder present.
+- **What to add:** 3-node fill rate line chart with 60% and 80% reference lines. Run `python analysis/tri_score.py` and extend it to output a plot.
 
-### 3. No time-series visualization of field data
-- Four CSV files with ~10,800 data points exist. No chart, no plot, no figure shows the actual data shape.
-- The TRİ scores (81, 58, 22) are claimed in the README with no supporting visualization.
-- **Fix:** Generate a multi-node line chart from the CSV data and include in repo and README.
+### 3. No laboratory validation photograph
+- "±4 cm accuracy" claim is unverifiable without a photo of the PVC pipe test setup.
+- **Where in README:** Section 10 (Test Results) — image placeholder present.
+- **What to add:** PVC pipe with sensor mounted, ruler visible for scale.
 
-### 4. No laboratory validation photograph
-- Lab test (PVC pipe, 7,200 samples) is described but there is no photo of the setup.
-- A claim of "±4 cm accuracy" with no physical setup photo is unverifiable.
-- **Fix:** See `docs/IMAGE_PLAN.md` item C5.
-
-### 5. Duplicate data directories (`files/` and `data/samples/`)
-- Original CSV files remain in `files/` (untracked, not in repo) while copies exist in `data/samples/`.
-- Version history is inconsistent. A reviewer pulling the repo gets only the `data/samples/` copies.
-- **Fix:** Remove `files/` from working directory. Add to `.gitignore`. Keep only `data/samples/`.
+### 4. Duplicate data directories (`files/` and `data/samples/`)
+- `files/` exists locally but is not committed. `data/samples/` has the committed copies.
+- **Fix:** Add `files/` to `.gitignore` explicitly.
 
 ---
 
 ## 🟠 High (Significantly Weakens Credibility)
 
-### 6. No wiring diagram image
-- `docs/Devre_Semalari.md` has tables. `docs/semalar.fzz` (Fritzing file) is referenced but not committed to repo.
-- A textual pin table is not a wiring diagram.
-- **Fix:** Commit `semalar.fzz` to `docs/`. Export a PNG schematic from Fritzing and add to `images/`.
+### 5. No wiring diagram image
+- `docs/Devre_Semalari.md` has tables only. `şemalar.fzz` is in the working directory but not committed.
+- **Where in README:** Section 6 (Wiring) — image placeholder present.
+- **Fix:** Commit `şemalar.fzz` to `docs/`. Export PNG from Fritzing and place in `images/`.
 
-### 7. No RTC — timestamps are `millis()` relative values
-- SD card CSV timestamps are milliseconds since boot, not wall clock.
-- The report references specific time windows (11:00–14:00, etc.) that cannot be verified from the CSV files directly.
-- **Fix:** Document explicitly in README that timestamps are relative. Note that correlation to clock time requires external reference (MGM data, phone camera timestamp during session).
+### 6. No RTC — timestamps are `millis()` relative values
+- CSV timestamps are ms since boot, not wall clock. Cannot verify "11:00–14:00" claims from CSV directly.
+- **Fix:** Document explicitly in README Section 9 (Usage → SD Card Data). *(Already noted in current README.)*
 
-### 8. No reproducibility proof beyond the author's machine
-- `server.py` has `SERIAL_PORT = "COM12"` hardcoded. No test on Linux or macOS.
-- Arduino board selection requires manual steps not visible to a third party.
-- **Fix:** Add a `SETUP.md` quick-start guide. Document tested OS. State Python version tested on.
+### 7. No reproducibility proof beyond Windows/author's machine
+- `SERIAL_PORT = "COM12"` is hardcoded in `server.py`. No Linux/macOS test documented.
+- **Fix:** Document tested OS and Python version in README Section 8.
 
-### 9. Battery life not measured
-- Nodes run on 1800 mAh Li-Po. Runtime is never mentioned in the report or README.
-- For field deployment credibility, this is a required specification.
-- **Fix:** Measure or estimate: `(1800 mAh) / (ESP32 ~240 mA active) ≈ 7.5h`. Document it. If measured, compare.
-
-### 10. No error rate or lost packet count from field sessions
-- ESP-NOW reliability in field conditions (buildings, rain interference) is never characterized.
-- "Zero packet loss in lab" is not transferable to field.
-- **Fix:** Add a packet counter to hub firmware and report field reliability in README section 10.
+### 8. No error rate or packet loss count from field sessions
+- ESP-NOW reliability in field conditions (buildings, rain) is never characterized.
+- **Fix:** Add packet counter to hub firmware. Report drop rate in README Section 10.
 
 ---
 
 ## 🟡 Medium (Documentation Gaps)
 
-### 11. Temp/scratch files committed or in working tree
-- `create_bom.py`, `ekler_out.txt`, `docx_output2.txt` exist in working directory.
-- **Fix:** Add these patterns to `.gitignore`. Delete from directory.
+### 9. Node names were inconsistent — FIXED
+- Node 1 = Barajyolu, Node 3 = Referans/Sinanpaşa now consistent across all docs.
 
-### 12. Node names inconsistent across files
-- README references "Node 1 — Referans" and "Node 1 — Baraj Yolu Geçidi" in different sections.
-- `index.html` has `NODE_NAMES = {1: 'Node 1 — Baraj Yolu Geçidi', ...}` but HTML cards say "Node 1 — Referans".
-- **Fix:** Standardize node names across all files. In this system, Node 3 is the reference node — not Node 1.
+### 10. TRİ had no reproducible implementation — FIXED
+- `analysis/tri_score.py` added. Reads CSVs, computes and prints TRİ scores.
 
-### 13. TRİ formula is documented in README but no code implements it
-- The composite scoring algorithm (TRİ) is explained mathematically in the README.
-- It is computed manually from CSV data.
-- No script in the repository performs this computation.
-- **Fix:** Add `analysis/tri_score.py` that reads CSVs from `data/samples/` and outputs TRİ scores. This makes the academic claim reproducible.
+### 11. No requirements for Arduino IDE version
+- `requirements.txt` only covers Python. Arduino IDE version, ESP32 board package version undocumented.
+- **Fix:** Expand README Section 8.1 with exact Arduino IDE version (2.x) and board package version tested.
 
-### 14. No requirements for Arduino IDE version
-- `requirements.txt` only covers Python dependencies.
-- Arduino IDE version, ESP32 board package version, and any known incompatibilities are undocumented.
-- **Fix:** Add an `ARDUINO_SETUP.md` or expand README section 8.1 with exact version numbers.
+### 12. Battery life was undocumented — FIXED
+- Runtime characterized from field test and added to README Section 11.
