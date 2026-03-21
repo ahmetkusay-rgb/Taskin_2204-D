@@ -402,12 +402,12 @@ Saha testleri aşamasında sistemin kararlılığını ve veri sürekliliğini �
 
 | Bileşen | Durum | Akım Tüketimi (Ort.) |
 |---|---|---|
-| ESP32-S3 | Aktif (WiFi açık) | ~80–100 mA |
+| ESP32-DevKit V4 | Aktif (WiFi açık) | ~70–90 mA |
 | HC-SR04 | Sürekli ölçüm | ~15 mA |
-| SD Kart Yazma | Aktif | ~20–30 mA |
-| **Toplam** | **Sürekli Aktif** | **~130–150 mA** |
+| MT3608 Regülatör | Kayıp | ~5–10 mA |
+| **Toplam** | **Sürekli Aktif** | **~90–115 mA** |
 
-**Test Sonucu:** 3,7V 1800 mAh Li-Po batarya ve MT3608 yükseltici modül ile yapılan testlerde, kesintisiz veri gönderimi ve kaydı altında ortalama **10–12 saat çalışma süresi** gözlemlenmiştir.
+**Test Sonucu:** 3,7V 1800 mAh Li-Po batarya ve MT3608 yükseltici modül ile yapılan testlerde, kesintisiz veri gönderimi ve kaydı altında ortalama **13-14 saat çalışma süresi** gözlemlenmiştir.
 
 > **Not:** Pil ömrünü aylara yaymak için yazılımsal olarak **Derin Uyku (Deep Sleep)** optimizasyonu bir sonraki güncelleme aşaması olarak planlanmaktadır. ESP32'nin ölçümler arasında uyku moduna alınmasıyla tahmini tüketim ~10 mA'e düşecek; bu da 60–80 saatlik sürekli çalışmayı mümkün kılacaktır.
 
