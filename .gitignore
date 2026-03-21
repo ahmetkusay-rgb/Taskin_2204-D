@@ -1,0 +1,57 @@
+# ── Python ──────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.env
+.venv/
+venv/
+env/
+
+# ── Arduino ─────────────────────────────────────
+*.elf
+*.hex
+*.bin
+build/
+.arduino15/
+
+# ── Windows ─────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ── Geçici Office dosyaları ──────────────────────
+~$*.docx
+~$*.xlsx
+~$*.pptx
+
+# ── Büyük binary dosyalar ────────────────────────
+*.zip
+*.rar
+*.7z
+
+# ── Fritzing proje dosyası (isteğe bağlı commit) ─
+# *.fzz
+
+# ── Kişisel / ortam dosyaları ────────────────────
+.DS_Store
+*.log
+*.tmp
+*.bak
+
+# ── Word geçici dosyaları ─────────────────────────
+*.docx
+*.doc
+
+# ── IDE / Editor ────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.user

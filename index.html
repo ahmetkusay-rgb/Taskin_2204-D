@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TAŞKIN Sensör Ağı</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #0a0c0f;
+      --panel: #0f1217;
+      --border: #1e2530;
+      --border2: #2a3444;
+      --text: #c8d4e0;
+      --text-dim: #4a5a6a;
+      --text-faint: #2a3444;
+      --accent: #00d4ff;
+      --gray: #3a4a5a;
+      --gray-dim: #1e2a34;
+      --green: #00cc66;
+      --orange: #ff8800;
+      --red: #ff2244;
+      --font-mono: 'Share Tech Mono', monospace;
+      --font-ui: 'Barlow', sans-serif;
+      --radius: 4px;
+    }
+
+    html,
+    body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-ui);
+      font-size: 14px;
+      overflow: hidden;
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: 48px 1fr;
+      grid-template-columns: 1fr 380px;
+      height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 0 20px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+    }
+
+    .header-logo {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--accent);
+      letter-spacing: 3px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-logo::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      animation: hpulse 2s ease-in-out infinite;
+    }
+
+    @keyframes hpulse {
+
+      0%,
+      100% {
+        opacity: 1;
+        box-shadow: 0 0 8px var(--accent);
+      }
+
+      50% {
+        opacity: .4;
+        box-shadow: 0 0 2px var(--accent);
+      }
+    }
+
+    .hdiv {
+      width: 1px;
+      height: 20px;
+      background: var(--border2);
+    }
+
+    .ws-status {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .ws-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--gray);
+      transition: background .4s, box-shadow .4s;
+    }
+
+    .ws-dot.connected {
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    .ws-dot.disconnected {
+      background: var(--red);
+      box-shadow: 0 0 6px var(--red);
+    }
+
+    .hspacer {
+      flex: 1;
+    }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .leg-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .leg-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .pkt {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .pkt span {
+      color: var(--accent);
+      margin-left: 4px;
+    }
+
+    /* ── Map ── */
+    .map-panel {
+      position: relative;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    #leaflet-map {
+      width: 100%;
+      height: 100%;
+    }
+
+    .leaflet-tile {
+      filter: brightness(.85) saturate(.9);
+    }
+
+    .leaflet-container {
+      background: var(--bg);
+    }
+
+    .leaflet-control-zoom a {
+      background: var(--panel) !important;
+      color: var(--text) !important;
+      border-color: var(--border2) !important;
+    }
+
+    .leaflet-control-zoom a:hover {
+      background: var(--border2) !important;
+    }
+
+    .leaflet-control-attribution {
+      background: rgba(10, 12, 15, .7) !important;
+      color: var(--text-dim) !important;
+      font-size: 9px !important;
+    }
+
+    .leaflet-control-attribution a {
+      color: var(--text-dim) !important;
+    }
+
+    .leaflet-popup-content-wrapper {
+      background: var(--panel) !important;
+      color: var(--text) !important;
+      border: 1px solid var(--border2) !important;
+      border-radius: var(--radius) !important;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, .6) !important;
+    }
+
+    .leaflet-popup-tip {
+      background: var(--panel) !important;
+    }
+
+    .leaflet-popup-content {
+      font-family: var(--font-mono) !important;
+      font-size: 12px !important;
+      margin: 10px 14px !important;
+      min-width: 180px;
+    }
+
+    /* ── Hover tooltip grafik ── */
+    .hover-chart-wrap {
+      position: absolute;
+      background: rgba(10, 12, 15, 0.96);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      padding: 10px 12px;
+      pointer-events: none;
+      z-index: 1000;
+      display: none;
+      min-width: 200px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, .7);
+    }
+
+    .hover-chart-title {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+
+    .hover-chart-val {
+      font-family: var(--font-mono);
+      font-size: 20px;
+      margin-bottom: 4px;
+    }
+
+    .hover-chart-status {
+      font-size: 10px;
+      margin-bottom: 8px;
+    }
+
+    .hover-sparkline {
+      display: block;
+    }
+
+    /* ── Sağ panel ── */
+    .log-panel {
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      border-left: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .node-cards {
+      padding: 12px 12px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .node-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      transition: border-color .4s, background .4s;
+    }
+
+    .node-card.green {
+      border-color: #00cc6644;
+      background: #001a0a;
+    }
+
+    .node-card.orange {
+      border-color: #ff880044;
+      background: #1a0e00;
+    }
+
+    .node-card.red {
+      border-color: #ff224444;
+      background: #1a0007;
+    }
+
+    .nci {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--gray);
+      flex-shrink: 0;
+      transition: background .4s, box-shadow .4s;
+    }
+
+    .node-card.green .nci {
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: nb 1.5s ease-in-out infinite;
+    }
+
+    .node-card.orange .nci {
+      background: var(--orange);
+      box-shadow: 0 0 6px var(--orange);
+      animation: nb 1.5s ease-in-out infinite;
+    }
+
+    .node-card.red .nci {
+      background: var(--red);
+      box-shadow: 0 0 6px var(--red);
+      animation: nb .8s ease-in-out infinite;
+    }
+
+    @keyframes nb {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: .4
+      }
+    }
+
+    .nci-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .nci-name {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    .node-card.green .nci-name,
+    .node-card.orange .nci-name,
+    .node-card.red .nci-name {
+      color: var(--text);
+    }
+
+    .nci-val {
+      font-family: var(--font-mono);
+      font-size: 18px;
+      color: var(--text-faint);
+      line-height: 1.1;
+      transition: color .4s;
+    }
+
+    .node-card.green .nci-val {
+      color: var(--green);
+    }
+
+    .node-card.orange .nci-val {
+      color: var(--orange);
+    }
+
+    .node-card.red .nci-val {
+      color: var(--red);
+    }
+
+    .nci-unit {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-left: 2px;
+    }
+
+    .nci-ago {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      flex-shrink: 0;
+      text-align: right;
+    }
+
+    .alarm-badge {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 1px;
+      padding: 1px 6px;
+      border-radius: 2px;
+      margin-top: 2px;
+      background: #ff224420;
+      color: var(--red);
+      border: 1px solid #ff224440;
+      display: none;
+    }
+
+    .node-card.red .alarm-badge {
+      display: inline-block;
+    }
+
+    /* Log */
+    .log-titlebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px 7px;
+      border-top: 1px solid var(--border);
+      margin-top: 8px;
+    }
+
+    .log-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    .log-clear {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      background: none;
+      border: 1px solid var(--border2);
+      padding: 2px 8px;
+      border-radius: var(--radius);
+      cursor: pointer;
+    }
+
+    .log-clear:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .log-stream {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      min-height: 0;
+    }
+
+    .log-stream::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .log-stream::-webkit-scrollbar-thumb {
+      background: var(--border2);
+      border-radius: 2px;
+    }
+
+    .log-row {
+      display: grid;
+      grid-template-columns: 88px 48px 60px 1fr;
+      gap: 0 8px;
+      padding: 2px 12px;
+      border-left: 2px solid transparent;
+      animation: ri .2s ease-out;
+    }
+
+    @keyframes ri {
+      from {
+        opacity: 0;
+        transform: translateX(4px)
+      }
+
+      to {
+        opacity: 1;
+        transform: none
+      }
+    }
+
+    .log-row:hover {
+      background: var(--panel);
+    }
+
+    .log-row.n1 {
+      border-left-color: #00ffaa44;
+    }
+
+    .log-row.n2 {
+      border-left-color: #00aaffaa;
+    }
+
+    .log-row.n3 {
+      border-left-color: #ffaa0044;
+    }
+
+    .log-time {
+      color: var(--text-dim);
+    }
+
+    .log-node {
+      font-weight: bold;
+    }
+
+    .log-row.n1 .log-node {
+      color: #00ffaa;
+    }
+
+    .log-row.n2 .log-node {
+      color: #00aaff;
+    }
+
+    .log-row.n3 .log-node {
+      color: #ffaa00;
+    }
+
+    .log-pct {
+      color: var(--text);
+    }
+
+    .log-alm {}
+
+    .log-alm.alarm {
+      color: var(--red);
+    }
+
+    /* ── Sabit grafikler ── */
+    .charts-section {
+      border-top: 1px solid var(--border);
+      padding: 8px 12px 10px;
+      flex-shrink: 0;
+    }
+
+    .charts-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .chart-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .chart-item {
+      position: relative;
+    }
+
+    .chart-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-bottom: 2px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .chart-label span {
+      color: var(--accent);
+    }
+
+    canvas.sparkline {
+      display: block;
+      width: 100%;
+      height: 36px;
+      border-radius: 2px;
+    }
+
+    .statusbar {
+      padding: 6px 12px;
+      border-top: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      display: flex;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    /* SD göstergesi */
+    .sd-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      transition: color .3s;
+    }
+
+    .sd-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 2px;
+      background: var(--gray);
+      transition: background .3s, box-shadow .3s;
+    }
+
+    .sd-dot.flash {
+      background: #00cc66;
+      box-shadow: 0 0 8px #00cc66;
+    }
+
+    .log-row.sd {
+      border-left-color: #00cc6644;
+    }
+
+    .log-row.sd .log-node {
+      color: #00cc66;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+
+    <!-- Header -->
+    <header>
+      <div class="header-logo">TAŞKIN</div>
+      <div class="hdiv"></div>
+      <div class="ws-status">
+        <div class="ws-dot" id="wsDot"></div>
+        <span id="wsLabel">WS BAĞLANTI YOK</span>
+      </div>
+      <div class="hdiv"></div>
+      <div class="legend">
+        <div class="leg-item">
+          <div class="leg-dot" style="background:#00cc66"></div><span
+            style="color:#4a5a6a;font-family:var(--font-mono);font-size:10px">%0–50 Normal</span>
+        </div>
+        <div class="leg-item">
+          <div class="leg-dot" style="background:#ff8800"></div><span
+            style="color:#4a5a6a;font-family:var(--font-mono);font-size:10px">%50–80 Yüksek</span>
+        </div>
+        <div class="leg-item">
+          <div class="leg-dot" style="background:#ff2244"></div><span
+            style="color:#4a5a6a;font-family:var(--font-mono);font-size:10px">%80+ Kritik</span>
+        </div>
+      </div>
+      <div class="hdiv"></div>
+      <div class="sd-indicator">
+        <div class="sd-dot" id="sdDot"></div>
+        <span id="sdLabel">SD —</span>
+      </div>
+      <div class="hspacer"></div>
+      <div class="pkt">KAYIT<span id="packetCount">0</span></div>
+    </header>
+
+    <!-- Map -->
+    <div class="map-panel">
+      <div id="leaflet-map"></div>
+      <!-- Hover sparkline tooltip -->
+      <div class="hover-chart-wrap" id="hoverChart">
+        <div class="hover-chart-title" id="hcTitle">NODE 1</div>
+        <div class="hover-chart-val" id="hcVal">—</div>
+        <div class="hover-chart-status" id="hcStatus"></div>
+        <canvas class="hover-sparkline" id="hcCanvas" width="200" height="50"></canvas>
+      </div>
+    </div>
+
+    <!-- Sağ panel -->
+    <div class="log-panel">
+      <!-- Node kartları -->
+      <div class="node-cards">
+        <div class="node-card" id="card1">
+          <div class="nci"></div>
+          <div class="nci-info">
+            <div class="nci-name">Node 1 — Referans</div>
+            <div><span class="nci-val" id="card1-val">—</span><span class="nci-unit">%</span></div>
+            <div class="alarm-badge">⚠ KRİTİK</div>
+          </div>
+          <div class="nci-ago" id="card1-ago">offline</div>
+        </div>
+        <div class="node-card" id="card2">
+          <div class="nci"></div>
+          <div class="nci-info">
+            <div class="nci-name">Node 2 — Turgut Özal Blv.</div>
+            <div><span class="nci-val" id="card2-val">—</span><span class="nci-unit">%</span></div>
+            <div class="alarm-badge">⚠ KRİTİK</div>
+          </div>
+          <div class="nci-ago" id="card2-ago">offline</div>
+        </div>
+        <div class="node-card" id="card3">
+          <div class="nci"></div>
+          <div class="nci-info">
+            <div class="nci-name">Node 3 — Baraj Yolu Geçidi</div>
+            <div><span class="nci-val" id="card3-val">—</span><span class="nci-unit">%</span></div>
+            <div class="alarm-badge">⚠ KRİTİK</div>
+          </div>
+          <div class="nci-ago" id="card3-ago">offline</div>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="log-titlebar">
+        <div class="log-title">◈ VERİ AKIŞI</div>
+        <button class="log-clear" onclick="clearLog()">TEMİZLE</button>
+      </div>
+      <div class="log-stream" id="logStream"></div>
+
+      <!-- Sabit grafikler -->
+      <div class="charts-section">
+        <div class="charts-title">◈ DOLULUK GEÇMİŞİ</div>
+        <div class="chart-row">
+          <div class="chart-item">
+            <div class="chart-label">NODE 1<span id="clv1">—%</span></div>
+            <canvas class="sparkline" id="chart1" height="36"></canvas>
+          </div>
+          <div class="chart-item">
+            <div class="chart-label">NODE 2<span id="clv2">—%</span></div>
+            <canvas class="sparkline" id="chart2" height="36"></canvas>
+          </div>
+          <div class="chart-item">
+            <div class="chart-label">NODE 3<span id="clv3">—%</span></div>
+            <canvas class="sparkline" id="chart3" height="36"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="statusbar">
+        <span id="statusLeft">bağlantı bekleniyor...</span>
+        <span>ws://127.0.0.1:8765</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script>
+    // ══════════════════════════════════════════════════════════
+    //  YAPILANDIRMA
+    // ══════════════════════════════════════════════════════════
+    const WS_URL = 'ws://127.0.0.1:8765';
+    const TIMEOUT_MS = 10000;
+    const MAX_LOG_ROWS = 200;
+    const RECONNECT_MS = 3000;
+    const HISTORY_LEN = 60;   // grafikte kaç nokta gösterilsin
+
+    const MAP_CENTER = [37.0, 35.32]; // Adana merkezi
+    const MAP_ZOOM = 14;
+
+    // !! KENDİ KOORDİNATLARINI GİR !!
+    const NODE_COORDS = {
+      1: [37.022, 35.322],  // Seyhan – Baraj Yolu Alt Geçidi
+      2: [37.048, 35.279],  // Çukurova – Turgut Özal Blv.
+      3: [37.005, 35.361],  // Yüreğir – Sinanpaşa
+    };
+    const NODE_NAMES = {
+      1: 'Node 1 — Baraj Yolu Geçidi',
+      2: 'Node 2 — Turgut Özal Blv.',
+      3: 'Node 3 — Sinanpaşa',
+    };
+    // ══════════════════════════════════════════════════════════
+
+    let ws = null;
+    let packetCount = 0;
+    let nodeLastSeen = { 1: 0, 2: 0, 3: 0 };
+    let nodeOnline = { 1: false, 2: false, 3: false };
+    let nodePct = { 1: 0, 2: 0, 3: 0 };
+    let nodeAlarm = { 1: 0, 2: 0, 3: 0 };
+    let nodeHistory = { 1: [], 2: [], 3: [] };
+    let nodeMarkers = {};
+
+    // ── Doluluk → renk sınıfı ─────────────────────────────────
+    function riskClass(pct) {
+      if (pct >= 80) return 'red';
+      if (pct >= 50) return 'orange';
+      return 'green';
+    }
+    function riskColor(pct) {
+      if (pct >= 80) return '#ff2244';
+      if (pct >= 50) return '#ff8800';
+      return '#00cc66';
+    }
+    function riskLabel(pct) {
+      if (pct >= 80) return '● KRİTİK';
+      if (pct >= 50) return '● YÜKSEK';
+      return '● NORMAL';
+    }
+
+    // ── Leaflet harita ────────────────────────────────────────
+    const map = L.map('leaflet-map', { center: MAP_CENTER, zoom: MAP_ZOOM });
+
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles © Esri', maxZoom: 20
+    }).addTo(map);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+      attribution: '© CartoDB', maxZoom: 20, opacity: 0.8
+    }).addTo(map);
+
+    // ── Marker icon ───────────────────────────────────────────
+    function makeIcon(id, pct, online) {
+      const color = online ? riskColor(pct) : '#3a4a5a';
+      const bg = online ? (pct >= 80 ? '#1a0007' : pct >= 50 ? '#1a0e00' : '#001a0a') : '#1e2a34';
+      const text = online ? `${Math.round(pct)}%` : `N${id}`;
+      const glow = online ? `0 0 16px ${color}88` : 'none';
+      return L.divIcon({
+        className: '',
+        iconSize: [48, 48], iconAnchor: [24, 24], popupAnchor: [0, -28],
+        html: `<div style="
+      width:48px;height:48px;border-radius:50%;
+      border:2px solid ${color};background:${bg};
+      color:${color};display:flex;align-items:center;justify-content:center;
+      font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:bold;
+      box-shadow:${glow},0 2px 8px rgba(0,0,0,.5);
+      transition:all .4s;text-align:center;line-height:1.1;
+    ">${text}</div>`
+      });
+    }
+
+    function popupHTML(id) {
+      const online = nodeOnline[id];
+      const pct = nodePct[id];
+      const alm = nodeAlarm[id];
+      const color = online ? riskColor(pct) : '#3a4a5a';
+      const lbl = online ? riskLabel(pct) : '● OFFLİNE';
+      return `<div>
+    <div style="font-size:10px;letter-spacing:1px;color:#c8d4e0;margin-bottom:4px">${NODE_NAMES[id]}</div>
+    ${online
+          ? `<div style="font-size:24px;color:${color};margin-bottom:2px">${pct.toFixed(1)}<span style="font-size:12px">%</span></div>
+         ${alm ? '<div style="font-size:10px;color:#ff2244;margin-bottom:2px">⚠ KRİTİK EŞİK AŞILDI</div>' : ''}
+         <div style="font-size:11px;color:${color}">${lbl}</div>`
+          : `<div style="font-size:14px;color:#3a4a5a;margin:4px 0">—</div>
+         <div style="font-size:11px;color:#3a4a5a">${lbl}</div>`
+        }
+  </div>`;
+    }
+
+    // Marker'ları oluştur
+    for (let id = 1; id <= 3; id++) {
+      const m = L.marker(NODE_COORDS[id], { icon: makeIcon(id, 0, false), title: NODE_NAMES[id] })
+        .bindPopup(popupHTML(id), { closeButton: false, autoClose: false, closeOnClick: false })
+        .addTo(map);
+
+      // Hover: sparkline tooltip göster
+      m.on('mouseover', (e) => showHoverChart(id, e));
+      m.on('mousemove', (e) => moveHoverChart(e));
+      m.on('mouseout', () => hideHoverChart());
+
+      m.openPopup();
+      nodeMarkers[id] = m;
+    }
+
+    function updateMarker(id) {
+      nodeMarkers[id].setIcon(makeIcon(id, nodePct[id], nodeOnline[id]));
+      nodeMarkers[id].getPopup().setContent(popupHTML(id));
+    }
+
+    // ── Hover sparkline ───────────────────────────────────────
+    const hoverChart = document.getElementById('hoverChart');
+    const hcCanvas = document.getElementById('hcCanvas');
+
+    function showHoverChart(id, e) {
+      document.getElementById('hcTitle').textContent = NODE_NAMES[id];
+      document.getElementById('hcTitle').style.color = nodeOnline[id] ? riskColor(nodePct[id]) : '#3a4a5a';
+
+      if (nodeOnline[id]) {
+        document.getElementById('hcVal').textContent = nodePct[id].toFixed(1) + '%';
+        document.getElementById('hcVal').style.color = riskColor(nodePct[id]);
+        document.getElementById('hcStatus').textContent = riskLabel(nodePct[id]);
+        document.getElementById('hcStatus').style.color = riskColor(nodePct[id]);
+      } else {
+        document.getElementById('hcVal').textContent = '—';
+        document.getElementById('hcVal').style.color = '#3a4a5a';
+        document.getElementById('hcStatus').textContent = '● OFFLİNE';
+        document.getElementById('hcStatus').style.color = '#3a4a5a';
+      }
+
+      drawSparkline(hcCanvas, nodeHistory[id], riskColor(nodePct[id]), 200, 50);
+      hoverChart.style.display = 'block';
+      moveHoverChart(e);
+    }
+
+    function moveHoverChart(e) {
+      const mp = document.querySelector('.map-panel').getBoundingClientRect();
+      const x = e.originalEvent.clientX - mp.left;
+      const y = e.originalEvent.clientY - mp.top;
+      const cw = hoverChart.offsetWidth || 220;
+      const ch = hoverChart.offsetHeight || 120;
+      const lx = (x + 20 + cw > mp.width) ? x - cw - 10 : x + 20;
+      const ly = (y + 10 + ch > mp.height) ? y - ch - 10 : y + 10;
+      hoverChart.style.left = lx + 'px';
+      hoverChart.style.top = ly + 'px';
+    }
+
+    function hideHoverChart() {
+      hoverChart.style.display = 'none';
+    }
+
+    // ── Sparkline çizici ──────────────────────────────────────
+    function drawSparkline(canvas, data, color, w, h) {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, w, h);
+
+      if (data.length < 2) {
+        ctx.fillStyle = '#1e2530';
+        ctx.fillRect(0, 0, w, h);
+        return;
+      }
+
+      // Arka plan
+      ctx.fillStyle = '#0a0c0f';
+      ctx.fillRect(0, 0, w, h);
+
+      // %80 ve %50 çizgileri
+      const y80 = h - (80 / 100) * h;
+      const y50 = h - (50 / 100) * h;
+      ctx.strokeStyle = '#ff224420'; ctx.lineWidth = 1;
+      ctx.setLineDash([2, 4]);
+      ctx.beginPath(); ctx.moveTo(0, y80); ctx.lineTo(w, y80); ctx.stroke();
+      ctx.strokeStyle = '#ff880020';
+      ctx.beginPath(); ctx.moveTo(0, y50); ctx.lineTo(w, y50); ctx.stroke();
+      ctx.setLineDash([]);
+
+      const pts = data.slice(-HISTORY_LEN);
+      const step = w / (pts.length - 1);
+
+      // Alan doldurma
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, color + '44');
+      grad.addColorStop(1, color + '04');
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      pts.forEach((v, i) => ctx.lineTo(i * step, h - (v / 100) * h));
+      ctx.lineTo((pts.length - 1) * step, h);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Çizgi
+      ctx.beginPath();
+      pts.forEach((v, i) => {
+        const x = i * step, y = h - (v / 100) * h;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // ── Sabit grafikler ───────────────────────────────────────
+    const CHART_COLORS = { 1: '#00ffaa', 2: '#00aaff', 3: '#ffaa00' };
+
+    function redrawCharts() {
+      [1, 2, 3].forEach(id => {
+        const canvas = document.getElementById(`chart${id}`);
+        const rect = canvas.parentElement.getBoundingClientRect();
+        drawSparkline(canvas, nodeHistory[id], CHART_COLORS[id], rect.width || 340, 36);
+      });
+    }
+
+    let sdLogCount = 0;
+    let sdFlashTimer = null;
+
+    function handleSdLog(msg) {
+      sdLogCount++;
+      packetCount++;
+      document.getElementById('packetCount').textContent = packetCount;
+      const dot = document.getElementById('sdDot');
+      const label = document.getElementById('sdLabel');
+
+      // Header'da yeşil flash
+      dot.classList.add('flash');
+      label.textContent = `SD ✓ ${sdLogCount}`;
+      label.style.color = '#00cc66';
+      clearTimeout(sdFlashTimer);
+      sdFlashTimer = setTimeout(() => {
+        dot.classList.remove('flash');
+        label.style.color = '';
+      }, 800);
+
+      // SD log satırı yok — sadece header ikonu yeterli
+    }
+
+    // ── WebSocket ─────────────────────────────────────────────
+    function connect() {
+      ws = new WebSocket(WS_URL);
+      ws.onopen = () => { setWs(true); document.getElementById('statusLeft').textContent = 'bağlandı'; };
+      ws.onclose = () => { setWs(false); document.getElementById('statusLeft').textContent = `bağlantı kesildi — ${RECONNECT_MS / 1000}s`; setTimeout(connect, RECONNECT_MS); };
+      ws.onerror = () => setWs(false);
+      ws.onmessage = e => {
+        const m = JSON.parse(e.data);
+        if (m.type === 'data') handleData(m);
+        if (m.type === 'sd_log') handleSdLog(m);
+      };
+    }
+
+    function setWs(on) {
+      document.getElementById('wsDot').className = 'ws-dot ' + (on ? 'connected' : 'disconnected');
+      document.getElementById('wsLabel').textContent = on ? 'WS BAĞLI' : 'WS KESİK';
+    }
+
+    // ── Veri işle ─────────────────────────────────────────────
+    function handleData(msg) {
+      const { node_id: id, time } = msg;
+      let pct = msg.doluluk_pct ?? 0;  // distance_cm fallback kaldırıldı
+      pct = Math.max(0, Math.min(100, pct));  // 0-100 arası sınırla
+      const alm = msg.alarm ?? 0;
+
+      nodeLastSeen[id] = Date.now();
+      nodeOnline[id] = true;
+      nodePct[id] = pct;
+      nodeAlarm[id] = alm;
+
+      // Geçmiş diziye ekle
+      nodeHistory[id].push(pct);
+      if (nodeHistory[id].length > HISTORY_LEN * 2) nodeHistory[id].shift();
+
+      // Kart güncelle
+      const rc = riskClass(pct);
+      const card = document.getElementById(`card${id}`);
+      card.className = `node-card ${rc}`;
+      document.getElementById(`card${id}-val`).textContent = pct.toFixed(1);
+
+      // Marker güncelle
+      updateMarker(id);
+
+      // Sabit grafikler
+      redrawCharts();
+      document.getElementById(`clv${id}`).textContent = pct.toFixed(1) + '%';
+
+      // Log
+      addLogRow(time, id, pct, alm);
+    }
+
+    // ── Node offline ──────────────────────────────────────────
+    function setOffline(id) {
+      nodeOnline[id] = false;
+      document.getElementById(`card${id}`).className = 'node-card';
+      document.getElementById(`card${id}-val`).textContent = '—';
+      document.getElementById(`card${id}-ago`).textContent = 'offline';
+      updateMarker(id);
+    }
+
+    // ── Log ───────────────────────────────────────────────────
+    function addLogRow(time, id, pct, alm) {
+      const stream = document.getElementById('logStream');
+      const row = document.createElement('div');
+      row.className = `log-row n${id}`;
+      row.innerHTML = `
+    <span class="log-time">${time}</span>
+    <span class="log-node">N${id}</span>
+    <span class="log-pct">${pct.toFixed(1)}%</span>
+    <span class="log-alm ${alm ? 'alarm' : ''}">${alm ? '⚠ ALARM' : '—'}</span>
+  `;
+      stream.insertBefore(row, stream.firstChild);
+      while (stream.children.length > MAX_LOG_ROWS) stream.removeChild(stream.lastChild);
+    }
+    function clearLog() { document.getElementById('logStream').innerHTML = ''; }
+
+    // ── Timeout ───────────────────────────────────────────────
+    setInterval(() => {
+      const now = Date.now();
+      for (let id = 1; id <= 3; id++) {
+        if (nodeOnline[id] && now - nodeLastSeen[id] > TIMEOUT_MS) setOffline(id);
+        if (nodeOnline[id]) {
+          const ago = ((now - nodeLastSeen[id]) / 1000).toFixed(1);
+          document.getElementById(`card${id}-ago`).textContent = ago + 's';
+        }
+      }
+    }, 500);
+
+    // ── Pencere yeniden boyutlandırıldığında grafikleri yeniden çiz
+    window.addEventListener('resize', redrawCharts);
+
+    connect();
+  </script>
+</body>
+
+</html>
