@@ -35,11 +35,11 @@ TAŞKIN, birden fazla kentsel ölçüm noktasında su doluluk düzeyini sürekli
 Sistemin temel çıktısı ham sensör okumaları değil; her ölçüm noktası için aşağıdaki bileşenlerden hesaplanan **TAŞKIN Risk İndeksi (TRİ)** modelidir:
 - Ortalama doluluk oranı
 - Maksimum doluluk oranı
-- %80 eşiğinin üzerinde kalınan süre
-- Eşik aşım sayısı
-- Doluluk artış hızı (%20'den %80'e geçiş süresi)
+- %80 eşiğinin üzerinde kalınan **süre yüzdesi**
+- **Saatlik** eşik aşım sıklığı
+- Tepe doluluk artış hızı (60 sn pencerede en hızlı tırmanış)
 
-Bu yaklaşım, toplanan ham verileri altyapı planlaması için **karar destek çıktısına** dönüştürmektedir.
+Skor iki yöntemle üretilir — **min-maks** (düğümler arası göreli sıralama) ve **hibrit** (mutlak referanslar ile min-maks harmanı) — ikisi de `analysis/tri_score.py` tarafından raporlanır. Bu yaklaşım, toplanan ham verileri altyapı planlaması için **karar destek çıktısına** dönüştürmektedir.
 
 ### Teknik Kapsam
 
@@ -48,7 +48,8 @@ Bu yaklaşım, toplanan ham verileri altyapı planlaması için **karar destek �
 | Aktif düğüm sayısı | 3 |
 | Örnekleme hızı | 1 Hz (1 ölçüm/saniye/düğüm) |
 | Kablosuz protokol | ESP-NOW (WiFi altyapısı gerektirmez) |
-| Ölçüm doğruluğu | ±4 cm (HC-SR04) |
+| Ultrasonik sensör | JSN-SR04T (su geçirmez); ilk prototipte HC-SR04 |
+| Ölçüm doğruluğu | ±1 cm (JSN-SR04T) |
 | Laboratuvar testi | 7.200 saniye (PVC boru, kontrollü ortam) |
 | Saha testi | 10.800 saniye, Adana, Şubat 2026 |
 | Batarya ömrü (ölçülen) | Sürekli-Açık modda 10–12 saat |
@@ -65,7 +66,7 @@ Sistem dört katmandan oluşmaktadır:
 │                                                                │
 │  [Düğüm 1 — Barajyolu] [Düğüm 2 — Turgut Özal] [Düğüm 3 — Ref]│
 │   ESP32-WROOM-32U        ESP32-WROOM-32U         ESP32-WROOM   │
-│   HC-SR04                HC-SR04                 HC-SR04       │
+│   JSN-SR04T              JSN-SR04T               JSN-SR04T     │
 │   Li-Po + TP4056 + MT3608                                      │
 └────────────────────┬───────────────────────────────────────────┘
                      │ ESP-NOW yayın (broadcast)
@@ -105,7 +106,7 @@ Sistem dört katmandan oluşmaktadır:
 
 ### Veri Akışı
 
-1. HC-SR04, su yüzeyine olan mesafeyi ölçer → `map(mesafe, MAX_DERINLIK, 0, 0, 100)` ile doluluk %'ye dönüştürülür
+1. JSN-SR04T, su yüzeyine olan mesafeyi ölçer (5 ölçümün medyanı) → float aritmetiğiyle `(derinlik − mesafe) / derinlik × 100` doluluk %'ye dönüştürülür
 2. Düğüm, `{node_id, doluluk_pct, alarm}` yapısını ESP-NOW broadcast MAC `FF:FF:FF:FF:FF:FF` adresine gönderir
 3. Merkez ESP32-S3, paketi doğrular (node_id 1–10, doluluk 0–100), SD'ye kaydeder, Seri porta yazar
 4. `server.py`, Seri portu okur ve WebSocket üzerinden JSON paketi yayınlar
@@ -127,8 +128,8 @@ Sistem dört katmandan oluşmaktadır:
 
 | Bileşen | Model | Teknik Görev |
 |---|---|---|
-| Mikrodenetleyici | ESP32-WROOM-32U | HC-SR04 sürücüsü, ESP-NOW, alarm yönetimi |
-| Ultrasonik Sensör | HC-SR04 | Temassız mesafe ölçümü: 2–400 cm, ±3 mm çözünürlük |
+| Mikrodenetleyici | ESP32-WROOM-32U | JSN-SR04T sürücüsü, ESP-NOW, alarm yönetimi |
+| Ultrasonik Sensör | JSN-SR04T | Su geçirmez temassız mesafe probu (~25–450 cm) |
 | Batarya | 3,7V 1800 mAh Li-Po | Şebeke bağlantısı gerektirmeyen saha güç kaynağı |
 | Şarj Modülü | TP4056 | Aşırı şarja karşı korumalı Li-Po şarj yönetimi |
 | Gerilim Yükseltici | MT3608 | 3,7V → 5V kararlı çıkış (ESP32 ve sensör için) |
@@ -136,6 +137,8 @@ Sistem dört katmandan oluşmaktadır:
 | Muhafaza | 11×11×7 cm IP67 Termoplastik Buat | Elektroniği dış ortam koşullarına karşı korur |
 | Nem Kontrolü | Silica Jel | Kutu içi yoğuşmayı önler |
 | Montaj | Plastik Kelepçe | Muhafazayı yapıya sabitler |
+
+> **Sensör geçişi:** İlk prototipte **HC-SR04** kullanıldı. Sensör gövdesi su geçirmez olmadığı ve sahada yağmur damlacığı kaynaklı sıçramalar ürettiği için tasarım su geçirmez **JSN-SR04T**'ye taşındı (güncel düğüm firmware'i). Tam malzeme listesi: [`docs/hardware/malzeme_listesi.md`](docs/hardware/malzeme_listesi.md).
 
 ### Neden ESP-NOW?
 
@@ -148,12 +151,12 @@ Sistem dört katmandan oluşmaktadır:
 
 ## 5. Fiziksel Tasarım
 
-Her düğüm **IP67 sertifikalı 11×11×7 cm termoplastik buat** içine yerleştirilmiştir. HC-SR04 sensörü, drenaj kanalına veya alt geçide **yukarıdan aşağı bakacak biçimde** ayarlanmıştır. Anten, RF sinyalinin kutunun dışına taşınmasını sağlamak için kablo rakoru ile dışarı çıkarılmıştır.
+Her düğüm **IP67 sertifikalı 11×11×7 cm termoplastik buat** içine yerleştirilmiştir. JSN-SR04T su geçirmez probu, drenaj kanalına veya alt geçide **yukarıdan aşağı bakacak biçimde** ayarlanmıştır. Anten, RF sinyalinin kutunun dışına taşınmasını sağlamak için kablo rakoru ile dışarı çıkarılmıştır.
 
 İç düzen: ESP32 → delikli plaket → TP4056 → MT3608 → ortak GND barası. ECHO sinyal kablosu kısa tutulmuştur.
 
 > **[GÖRSEL YERİ — Bölüm 5a]:** Düğüm muhafazasının içi — tüm bileşenler etiketli, yukarıdan çekim
-> **[GÖRSEL YERİ — Bölüm 5b]:** HC-SR04 sensörünün su yüzeyine yönlendirilmiş hali, montaj geometrisi
+> **[GÖRSEL YERİ — Bölüm 5b]:** JSN-SR04T probunun su yüzeyine yönlendirilmiş hali, montaj geometrisi
 > **[GÖRSEL YERİ — Bölüm 5c]:** Kapalı IP67 muhafaza dışarıdan — anten ve kablo rakoru görünür
 > **[GÖRSEL YERİ — Bölüm 5d]:** Barajyolu alt geçidinde sahaya kurulmuş Düğüm 1
 
@@ -174,13 +177,13 @@ Her düğüm **IP67 sertifikalı 11×11×7 cm termoplastik buat** içine yerleş
 
 > **Not:** ESP32-S3 varsayılan SPI pinleri farklıdır. Firmware `SPI.begin(12, 13, 11, 10)` ile özel pin ataması yapar.
 
-### Düğüm: ESP32 ↔ HC-SR04 ↔ Güç Zinciri
+### Düğüm: ESP32 ↔ JSN-SR04T ↔ Güç Zinciri
 
 | Sinyal | Kaynak | Hedef | Not |
 |---|---|---|---|
-| TRIG | GPIO 5 | HC-SR04 TRIG | 10 µs HIGH darbe ölçümü başlatır |
-| ECHO | HC-SR04 ECHO | GPIO 18 (gerilim bölücü üzerinden) | HC-SR04 çıkışı 5V — bölücü ile 3,3V'a düşürülür |
-| VCC (sensör) | MT3608 5V çıkış | HC-SR04 VCC | Sensör 5V gerektirir |
+| TRIG | GPIO 5 | JSN-SR04T TRIG | 10 µs HIGH darbe ölçümü başlatır |
+| ECHO | JSN-SR04T ECHO | GPIO 18 (gerilim bölücü üzerinden) | 5V beslemede ECHO 5V olabilir — bölücü ile 3,3V'a düşürülmesi önerilir |
+| VCC (sensör) | MT3608 5V çıkış | JSN-SR04T VCC | Sensör 5V gerektirir |
 | VCC (ESP32) | MT3608 5V çıkış | ESP32 VIN | Aynı 5V hattı |
 | GND | Ortak bara | Tüm bileşenler | Tek ortak toprak |
 | BAT+ | Li-Po (+) | TP4056 B+ | Şarj girişi |
@@ -189,47 +192,49 @@ Her düğüm **IP67 sertifikalı 11×11×7 cm termoplastik buat** içine yerleş
 **Alarm sıfırlama düğmesi:** GPIO 25 (`INPUT_PULLUP`). Döngüde LOW okunursa o çevrimde alarm bayrağı sıfırlanır.
 
 > **[GÖRSEL YERİ — Bölüm 6]:** Kablolama şeması (Fritzing dışa aktarım veya elle çizilmiş şema)
-> *(Fritzing kaynak dosyası: `docs/şemalar.fzz`)*
+> *(Pin tabloları: [`docs/hardware/baglanti_semasi.md`](docs/hardware/baglanti_semasi.md))*
 
 ---
 
 ## 7. Yazılım Yapısı
 
 ```
-TASKIN/
+Taskin_2204-D/
 ├── firmware/
-│   ├── node_21.02/
-│   │   └── node_21.02.ino       # Sensör düğümü firmware (ESP32-WROOM)
-│   └── merkez_10.03/
-│       └── merkez_10.03.ino     # Merkez birim firmware (ESP32-S3)
-├── server.py                    # Python seri port → WebSocket köprüsü
-├── index.html                   # Tek dosya web panosu
+│   ├── node/
+│   │   └── node.ino             # Sensör düğümü firmware (ESP32-WROOM, JSN-SR04T)
+│   └── merkez/
+│       └── merkez.ino           # Merkez birim firmware (ESP32-S3, SD kurtarma)
+├── software/
+│   ├── server.py                # Python seri port → WebSocket köprüsü
+│   └── index.html               # Tek dosya web panosu
 ├── analysis/
-│   └── tri_score.py             # CSV verilerinden TRİ hesaplama scripti
+│   └── tri_score.py             # TRİ hesaplayıcı (min-maks + hibrit)
 ├── data/
-│   └── samples/                 # Saha testi CSV kayıtları (4 dosya)
+│   ├── samples/                 # Saha testi CSV kayıtları (4 dosya)
+│   └── session_log.md           # Saha oturumu meta verisi
 ├── docs/
-│   ├── Devre_Semalari.md        # Pin bağlantı tabloları
-│   ├── CODE_REVIEW.md           # Kod kalitesi incelemesi
-│   ├── MISSING.md               # Eksik öğeler listesi
-│   └── IMAGE_PLAN.md            # Gerekli görsel/fotoğraf planı
-├── Malzeme_Listesi.xlsx         # Malzeme listesi
+│   ├── hardware/
+│   │   ├── baglanti_semasi.md   # Pin bağlantı tabloları
+│   │   └── malzeme_listesi.md   # Malzeme listesi (sensör dahil)
+│   └── images/                  # Saha fotoğrafları, devre görselleri
 ├── LICENSE
 ├── requirements.txt
 └── README.md / README_TR.md
 ```
 
-### `node_21.02.ino` — Sensör Düğümü
+### `node.ino` — Sensör Düğümü
 
-- HC-SR04 pinleri, alarm sıfırlama düğmesi (PULLUP) ve ESP-NOW broadcast peer'i yapılandırır
-- `mesafeOlc()`: 10 µs TRIG darbesi gönderir, 60 ms zaman aşımıyla ECHO süresini okur, cm'ye çevirir
-- `loop()`: ölç → doluluk %'ye dönüştür → alarm değerlendir → struct paketini oluştur → `esp_now_send()` → 1000 ms bekle
+- JSN-SR04T pinleri, alarm sıfırlama düğmesi (PULLUP) ve ESP-NOW broadcast peer'i yapılandırır
+- `tekOlcum()` / `mesafeOlc()`: 5 ölçüm alır (150 ms echo zaman aşımı), aralık dışı okumaları eler, gürültüyü bastırmak için **medyan** döndürür
+- `loop()`: ölç → float doluluk % (`map()` yok) → başarısız okumada son geçerli değeri korur → alarm değerlendir → `esp_now_send()` → 1000 ms bekle
 - GPIO 25 butonu döngüde LOW ise o çevrimde `alarm = 0` atanır
 
-### `merkez_10.03.ino` — Merkez Birim
+### `merkez.ino` — Merkez Birim
 
 - Özel SPI başlatma: `SPI.begin(12, 13, 11, 10)` — varsayılan dışı pinler zorunludur
 - İlk açılışta başlık satırıyla `/veri_log.csv` oluşturur
+- **SD kurtarma:** yazma başarısız olursa veya kart düşerse `sdKurtarmaDene()` kartı yeniden başlatır (cooldown'lı) ve tekrar dener; sorunluyken `SD_FAIL,node_id`, geri gelince `SD_RECOVERED` satırı yazar
 - `OnDataRecv()` geri çağrısı: node_id [1,10] aralığını, doluluk [0,100] kısıtını, alarm {0,1} geçerliliğini denetler
 - SD'ye `zaman_ms,node_id,doluluk,alarm` kaydeder; Seri porta `node_id,doluluk,alarm` yazar
 - Başarılı her SD yazımından sonra `SD_OK,node_id` satırı çıkarır
@@ -252,11 +257,12 @@ TASKIN/
 
 ### `analysis/tri_score.py` — TRİ Hesaplayıcı
 
-- `data/samples/` içindeki tüm CSV dosyalarını okur
-- Düğüm başına hesaplar: ortalama doluluk, maksimum doluluk, standart sapma, %80 üzeri süre, eşik aşım sayısı, artış süresi
-- Min-maks normalizasyonuyla tüm metrikleri 0–100 arasına ölçekler
-- Eşit ağırlıklı bileşik TRİ skorunu hesaplar ve sıralı risk tablosunu yazdırır
-- Çalıştırma: `python analysis/tri_score.py`
+- `data/samples/` içindeki tüm CSV dosyalarını okur; `durum=KAYIP` sensör kesinti satırlarını eler
+- Düğüm başına hesaplar: ortalama doluluk, maksimum doluluk, standart sapma, %80/%60 üzeri **süre yüzdesi**, **saatlik** %80 aşım sıklığı ve **tepe doluluk artış hızı** (60 sn pencerede en hızlı tırmanış, %/dk)
+- Bileşik TRİ'yi **iki yöntemle, ikisini de yazdırarak** hesaplar:
+  - **min-maks** — her parametre düğümler arasında normalize edilir (göreli sıralama)
+  - **hibrit** — mutlak (sabit 0–100 referans) ile min-maks harmanlanır; skorlar yorumlanabilir kalır ve referans düğüm 0'a zorlanmaz
+- Çalıştırma: `python analysis/tri_score.py` (`--chart` ile zaman serisi PNG, `--method minmax|hybrid|both`)
 
 ---
 
@@ -277,7 +283,7 @@ TASKIN/
 **Harici kütüphane kurulumu gerekmez.** `WiFi.h`, `esp_now.h`, `SD.h`, `SPI.h` kütüphanelerinin tamamı ESP32 kart paketiyle birlikte gelir.
 
 **Düğüm firmware yükleme:**
-1. `firmware/node_21.02/node_21.02.ino` dosyasını aç
+1. `firmware/node/node.ino` dosyasını aç
 2. Cihaza özgü sabitleri ayarla:
    ```cpp
    #define NODE_ID              1    // Her cihaz için benzersiz 1–10
@@ -289,7 +295,7 @@ TASKIN/
 5. Yükle
 
 **Merkez firmware yükleme:**
-1. `firmware/merkez_10.03/merkez_10.03.ino` dosyasını aç
+1. `firmware/merkez/merkez.ino` dosyasını aç
 2. Formatlanmış SD kartı modüle takılı olduğundan emin ol
 3. *Araçlar → Kart* → **ESP32S3 Dev Module**
 4. Yükle
@@ -301,10 +307,10 @@ TASKIN/
 pip install -r requirements.txt
 
 # Portu otomatik algılamayla:
-python server.py
+python software/server.py
 
 # Portu elle belirterek:
-python server.py --port COM12
+python software/server.py --port COM12
 ```
 
 ### 8.3 Web Panosu
@@ -323,7 +329,7 @@ Derleme adımı yoktur. Tek bir HTML dosyasıdır.
 
 1. Tüm sensör düğümlerini güce bağla (batarya veya USB)
 2. Merkez ESP32-S3'ü USB ile bilgisayara bağla
-3. `python server.py --port COM12` komutunu çalıştır
+3. `python software/server.py --port COM12` komutunu çalıştır
 4. `http://127.0.0.1:8080/index.html` adresini tarayıcıda aç
 5. ESP-NOW paketleri gelmeye başladıkça düğümler haritada ~5 saniye içinde görünür
 
@@ -354,7 +360,7 @@ zaman_ms,node_id,doluluk,alarm
 
 > **[GÖRSEL YERİ — Bölüm 10a]:** PVC boru laboratuvar düzeneği — sensör monte edilmiş, ölçek için cetvel görünür
 
-**Sensör doğruluğu:** Manuel referans ölçümlerle karşılaştırmada ±4 cm sapma — HC-SR04 teknik tolerans sınırları içinde.
+**Sensör doğruluğu:** İlk **HC-SR04 prototip** laboratuvar oturumunda manuel referansa göre ±4 cm sapma ölçüldü; üretim **JSN-SR04T** bunu ~±1 cm'ye iyileştirdi ve yağmur damlacığı sıçramalarını giderdi.
 
 | Düğüm | Ort. Doluluk (%) | Maks. Doluluk (%) | >%60 Süresi (sn) | >%80 Süresi (sn) | %20→%80 Artışı (sn) |
 |---|---|---|---|---|---|
@@ -381,13 +387,15 @@ zaman_ms,node_id,doluluk,alarm
 | Düğüm 2 — Turgut Özal | 42 | 76 | 14,8 | 52 | 3 |
 | Düğüm 3 — Sinanpaşa (Ref.) | 18 | 34 | 6,2 | 0 | 0 |
 
-**TRİ Skorları** (eşit ağırlıklı bileşik, min-maks normalize — `analysis/tri_score.py` çalıştırılarak üretilmiştir):
+**TRİ Skorları** (eşit ağırlıklı bileşik — `analysis/tri_score.py` çalıştırılarak üretilir):
 
 | Düğüm | TRİ | Risk Seviyesi |
 |---|---|---|
 | Düğüm 1 — Barajyolu | **81** | 🔴 Kritik |
 | Düğüm 2 — Turgut Özal | **58** | 🟠 Yüksek |
 | Düğüm 3 — Sinanpaşa (Ref.) | **22** | 🟢 Düşük |
+
+> Yukarıdaki değerler örnek/temsili rapor değerleridir. Hesaplayıcı, `data/samples/` içindeki veri için **hem** min-maks **hem** hibrit sıralamayı yazdırır; kesin skorlar veri kümesine bağlıdır (saf min-maks'ta en düşük düğüm 0'a zorlanır, hibrit yöntem bu yüzden de sunulur).
 
 > **[GÖRSEL YERİ — Bölüm 10b]:** Saha oturumu sırasında canlı pano ekran görüntüsü — renk kodlu işaretçiler, aktif olay akışı
 > **[GÖRSEL YERİ — Bölüm 10c]:** 3 düğüm için zaman serisi doluluk eğrisi grafiği (CSV verisinden üretilmiş)
@@ -403,7 +411,7 @@ Saha testleri aşamasında sistemin kararlılığını ve veri sürekliliğini �
 | Bileşen | Durum | Akım Tüketimi (Ort.) |
 |---|---|---|
 | ESP32-DevKit V4 | Aktif (WiFi açık) | ~70–90 mA |
-| HC-SR04 | Sürekli ölçüm | ~15 mA |
+| JSN-SR04T | Sürekli ölçüm | ~15 mA |
 | MT3608 Regülatör | Kayıp | ~5–10 mA |
 | **Toplam** | **Sürekli Aktif** | **~90–115 mA** |
 
@@ -415,7 +423,7 @@ Saha testleri aşamasında sistemin kararlılığını ve veri sürekliliğini �
 
 | Zayıflık | Etkisi |
 |---|---|
-| HC-SR04 su geçirmez değildir | Yağmur damlacıkları ölçüm gürültüsüne yol açar |
+| Köpük/türbülanstan ultrasonik yansıma | JSN-SR04T ile bile yüzey türbülansı yankıyı saçabilir (5 örnek medyanı ile hafifletilir) |
 | NODE_ID yükleme sırasında sabit kodlanmıştır | Birden fazla düğüm için ayrı Arduino yüklemesi gerekir |
 | Gerçek zamanlı saat (RTC) yoktur | CSV zaman damgaları `millis()` — başlangıçtan geçen süre, duvar saati değil |
 | Tek atlama ESP-NOW | Tüm düğümler merkezin ~200 m yakınında olmalıdır |
@@ -425,7 +433,7 @@ Saha testleri aşamasında sistemin kararlılığını ve veri sürekliliğini �
 
 ### Önerilen Geliştirmeler
 
-1. HC-SR04 yerine su geçirmez ultrasonik (MaxBotix MB7389) veya radar sensör kullanılması
+1. JSN-SR04T'nin köpük/türbülans bağışıklığı için radar / MaxBotix MB7389 sensöre yükseltilmesi
 2. Mutlak zaman damgaları için merkeze DS3231 RTC modülü eklenmesi
 3. Çok günlük batarya çalışması için ESP32 Derin Uyku ile 1 Hz uyandırma döngüsü uygulanması
 4. Kalıcı saha kurulumu için güneş paneli + şarj kontrolcüsü eklenmesi

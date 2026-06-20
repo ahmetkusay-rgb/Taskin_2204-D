@@ -36,11 +36,11 @@ TAŞKIN deploys a multi-node wireless sensor network that continuously measures 
 The system's key output is not raw sensor readings — it produces a **TAŞKIN Risk Index (TRİ)**, a composite 0–100 score per measurement point derived from:
 - Mean fill rate
 - Maximum fill rate
-- Time above 80% threshold
-- Threshold crossing frequency
-- Fill rise speed (20%→80% transition time)
+- % of time above the 80% threshold
+- Threshold crossing frequency (per hour)
+- Peak fill-rise rate (fastest climb over a 60 s window)
 
-This transforms collected data into **decision-support output** for infrastructure planning.
+The score is produced by two methods — **min-max** (relative ranking across nodes) and **hybrid** (absolute anchors blended with min-max) — both reported by `analysis/tri_score.py`. This transforms collected data into **decision-support output** for infrastructure planning.
 
 ### Technical Scope
 
@@ -49,7 +49,8 @@ This transforms collected data into **decision-support output** for infrastructu
 | Nodes deployed | 3 |
 | Sampling rate | 1 Hz (1 sample/second/node) |
 | Wireless protocol | ESP-NOW (no WiFi infrastructure required) |
-| Measurement accuracy | ±4 cm (HC-SR04) |
+| Ultrasonic sensor | JSN-SR04T (waterproof); HC-SR04 in early prototype |
+| Measurement accuracy | ±1 cm (JSN-SR04T) |
 | Lab validation | 7,200 seconds (PVC pipe, controlled) |
 | Field test | 10,800 seconds over 3 days, Adana, Feb 2026 |
 | Battery runtime (measured) | 10–12 hours @ Always-On mode |
@@ -66,7 +67,7 @@ The system has four layers:
 │                                                                │
 │  [Node 1 — Barajyolu]  [Node 2 — Turgut Özal]  [Node 3 — Ref] │
 │  ESP32-WROOM-32U        ESP32-WROOM-32U          ESP32-WROOM   │
-│  HC-SR04                HC-SR04                  HC-SR04       │
+│  JSN-SR04T              JSN-SR04T                JSN-SR04T     │
 │  Li-Po + TP4056 + MT3608                                       │
 └────────────────────┬───────────────────────────────────────────┘
                      │ ESP-NOW broadcast
@@ -106,7 +107,7 @@ The system has four layers:
 
 ### Data Flow
 
-1. HC-SR04 measures distance to water surface → converted to fill% via `map(distance, MAX_DEPTH, 0, 0, 100)`
+1. JSN-SR04T measures distance to water surface (median of 5 samples) → converted to fill% via float arithmetic `(depth − distance) / depth × 100`
 2. Node broadcasts `{node_id, fill_pct, alarm}` struct via ESP-NOW to broadcast MAC `FF:FF:FF:FF:FF:FF`
 3. Hub ESP32-S3 validates (node_id 1–10, fill_pct 0–100), logs to SD, writes to Serial
 4. `server.py` parses Serial, broadcasts `{"type":"data", "node_id":N, "doluluk_pct":X, "alarm":Y, "time":"..."}` over WebSocket
@@ -128,8 +129,8 @@ The system has four layers:
 
 | Component | Part | Technical Role |
 |---|---|---|
-| Microcontroller | ESP32-WROOM-32U | Drives HC-SR04, manages ESP-NOW, evaluates alarm |
-| Ultrasonic sensor | HC-SR04 | Non-contact distance: 2–400 cm, ±3 mm resolution |
+| Microcontroller | ESP32-WROOM-32U | Drives JSN-SR04T, manages ESP-NOW, evaluates alarm |
+| Ultrasonic sensor | JSN-SR04T | Waterproof non-contact distance probe (~25–450 cm) |
 | Battery | 3.7V 1800 mAh Li-Po | Field power — no mains required |
 | Charger | TP4056 module | Li-Po charge management with overcharge protection |
 | Boost converter | MT3608 | Steps 3.7V → stable 5V for ESP32 and sensor |
@@ -137,6 +138,8 @@ The system has four layers:
 | Enclosure | 11×11×7 cm IP67 thermoplastic box | Weatherproofs electronics for outdoor field use |
 | Moisture control | Silica gel sachet | Prevents internal condensation |
 | Mounting | Plastic cable ties | Fixes enclosure to structure |
+
+> **Sensor migration:** the initial prototype used the **HC-SR04**. Because its transducer is not weatherproof and produced rain-droplet spikes in the field, the design moved to the waterproof **JSN-SR04T** (current node firmware). Full bill of materials: [`docs/hardware/malzeme_listesi.md`](docs/hardware/malzeme_listesi.md).
 
 ### Why ESP-NOW Over WiFi or LoRa?
 
@@ -150,12 +153,12 @@ ESP-NOW is chosen because:
 
 ## 5. Physical Design
 
-Each node is enclosed in an **IP67-rated 11×11×7 cm thermoplastic box**. The HC-SR04 sensor is oriented to point **downward into the drainage channel or road underpass** through a sealed port. The antenna exits through a cable gland to ensure RF propagation outside the enclosure.
+Each node is enclosed in an **IP67-rated 11×11×7 cm thermoplastic box**. The JSN-SR04T waterproof probe is oriented to point **downward into the drainage channel or road underpass** through a sealed port. The antenna exits through a cable gland to ensure RF propagation outside the enclosure.
 
 Internal layout: ESP32 → perforated PCB board → TP4056 → MT3608 → shared GND bus. Wiring kept short to minimize noise on the ECHO signal line.
 
 > **[IMAGE PLACEHOLDER — Section 5a]:** Interior of node enclosure — top-down view, all components visible and labeled
-> **[IMAGE PLACEHOLDER — Section 5b]:** HC-SR04 sensor aimed at water surface, showing mounting geometry
+> **[IMAGE PLACEHOLDER — Section 5b]:** JSN-SR04T probe aimed at water surface, showing mounting geometry
 > **[IMAGE PLACEHOLDER — Section 5c]:** Sealed IP67 enclosure exterior with antenna and cable gland
 > **[IMAGE PLACEHOLDER — Section 5d]:** Node 1 mounted in field at Barajyolu underpass
 
@@ -176,13 +179,13 @@ Internal layout: ESP32 → perforated PCB board → TP4056 → MT3608 → shared
 
 > **Note:** These are non-default SPI pins for ESP32-S3. The firmware uses `SPI.begin(12, 13, 11, 10)` explicitly.
 
-### Node: ESP32 ↔ HC-SR04 ↔ Power Chain
+### Node: ESP32 ↔ JSN-SR04T ↔ Power Chain
 
 | Signal | From | To | Notes |
 |---|---|---|---|
-| TRIG | GPIO 5 | HC-SR04 TRIG | 10 µs HIGH pulse initiates measurement |
-| ECHO | HC-SR04 ECHO | GPIO 18 (via voltage divider) | HC-SR04 outputs 5V logic — divider to 3.3V required |
-| VCC (sensor) | MT3608 5V out | HC-SR04 VCC | Sensor requires 5V supply |
+| TRIG | GPIO 5 | JSN-SR04T TRIG | 10 µs HIGH pulse initiates measurement |
+| ECHO | JSN-SR04T ECHO | GPIO 18 (via voltage divider) | At 5V supply ECHO is 5V logic — divider to 3.3V recommended |
+| VCC (sensor) | MT3608 5V out | JSN-SR04T VCC | Sensor requires 5V supply |
 | VCC (ESP32) | MT3608 5V out | ESP32 VIN | Same 5V rail |
 | GND | Common bus | All components | Single shared ground |
 | BAT+ | Li-Po (+) | TP4056 B+ | Charge input |
@@ -191,49 +194,51 @@ Internal layout: ESP32 → perforated PCB board → TP4056 → MT3608 → shared
 **Alarm reset button:** GPIO 25 (`INPUT_PULLUP`). Reads LOW during loop → zeros alarm flag for that cycle.
 
 > **[IMAGE PLACEHOLDER — Section 6]:** Wiring diagram (Fritzing export or hand-drawn schematic)
-> *(Fritzing source: `docs/şemalar.fzz`)*
+> *(Pin tables: [`docs/hardware/baglanti_semasi.md`](docs/hardware/baglanti_semasi.md))*
 
 ---
 
 ## 7. Software Structure
 
 ```
-TASKIN/
+Taskin_2204-D/
 ├── firmware/
-│   ├── node_21.02/
-│   │   └── node_21.02.ino       # Sensor node firmware (ESP32-WROOM)
-│   └── merkez_10.03/
-│       └── merkez_10.03.ino     # Hub firmware (ESP32-S3)
-├── server.py                    # Python serial → WebSocket bridge
-├── index.html                   # Single-file web dashboard
+│   ├── node/
+│   │   └── node.ino             # Sensor node firmware (ESP32-WROOM, JSN-SR04T)
+│   └── merkez/
+│       └── merkez.ino           # Hub firmware (ESP32-S3, SD recovery)
+├── software/
+│   ├── server.py                # Python serial → WebSocket bridge
+│   └── index.html               # Single-file web dashboard
 ├── analysis/
-│   └── tri_score.py             # TRİ index calculator from CSV data
+│   └── tri_score.py             # TRİ calculator (min-max + hybrid)
 ├── data/
-│   └── samples/                 # Field test CSV logs (4 files, ~10,800 rows each)
+│   ├── samples/                 # Field test CSV logs (4 files, ~10,800 rows each)
+│   └── session_log.md           # Field session metadata
 ├── docs/
-│   ├── Devre_Semalari.md        # Pin connection tables
-│   ├── CODE_REVIEW.md           # Code quality review
-│   ├── MISSING.md               # Missing elements checklist
-│   └── IMAGE_PLAN.md            # Required photo/visual checklist
-├── Malzeme_Listesi.xlsx         # Bill of materials
+│   ├── hardware/
+│   │   ├── baglanti_semasi.md   # Pin connection tables
+│   │   └── malzeme_listesi.md   # Bill of materials (sensor included)
+│   └── images/                  # Field photos, circuit visuals
 ├── LICENSE
 ├── requirements.txt
 └── README.md / README_TR.md
 ```
 
-### `node_21.02.ino` — Sensor Node
+### `node.ino` — Sensor Node
 
-- Configures HC-SR04 pins, alarm reset button (PULLUP), and ESP-NOW broadcast peer (`FF:FF:FF:FF:FF:FF`)
-- `mesafeOlc()`: sends 10 µs TRIG pulse, reads ECHO duration with 60 ms timeout, converts to cm
-- `loop()`: measure → map to fill% → evaluate alarm → pack struct → `esp_now_send()` → 1000 ms delay
+- Configures JSN-SR04T pins, alarm reset button (PULLUP), and ESP-NOW broadcast peer (`FF:FF:FF:FF:FF:FF`)
+- `tekOlcum()` / `mesafeOlc()`: takes 5 samples (150 ms echo timeout), rejects out-of-range readings, returns the **median** to suppress noise
+- `loop()`: measure → float fill% (no `map()`) → on failed read holds last valid value → evaluate alarm → `esp_now_send()` → 1000 ms delay
 - Button on GPIO 25: if LOW during loop, sets `alarm = 0` for that cycle
 
-### `merkez_10.03.ino` — Hub
+### `merkez.ino` — Hub
 
 - Custom SPI bus init: `SPI.begin(12, 13, 11, 10)` — non-default pins required
 - Creates `/veri_log.csv` with header row on first boot
+- **SD recovery:** if a write fails or the card drops, `sdKurtarmaDene()` re-initializes the card (cooldown-limited) and retries; emits `SD_FAIL,node_id` while degraded and `SD_RECOVERED` on reconnect
 - `OnDataRecv()` callback: validates node_id ∈ [1,10], clamps fill to [0,100], validates alarm ∈ {0,1}
-- Logs `timestamp_ms,node_id,fill_pct,alarm` to SD; prints `node_id,fill_pct,alarm` to Serial
+- Logs `zaman_ms,node_id,doluluk,alarm` to SD; prints `node_id,fill_pct,alarm` to Serial
 - Prints `SD_OK,node_id` after each successful SD write (consumed by `server.py`)
 
 ### `server.py` — Bridge
@@ -255,11 +260,12 @@ TASKIN/
 
 ### `analysis/tri_score.py` — TRİ Calculator
 
-- Reads all CSVs from `data/samples/`
-- Computes per-node: mean fill, max fill, std dev, time above 80%, threshold crossings, fill rise duration
-- Min-max normalizes all metrics across nodes
-- Computes equal-weight composite TRİ score and prints ranked risk table
-- Run with: `python analysis/tri_score.py`
+- Reads all CSVs from `data/samples/`; drops `durum=KAYIP` sensor-dropout rows
+- Computes per-node: mean fill, max fill, std dev, **% of time** above 80%/60%, 80%-crossing frequency **per hour**, and **peak fill-rise rate** (fastest climb over a 60 s window, %/min)
+- Computes the composite TRİ with **two methods, both printed**:
+  - **min-max** — each parameter normalized across nodes (relative ranking)
+  - **hybrid** — blends absolute (fixed 0–100 anchors) with min-max, so scores stay interpretable and the reference node is not forced to 0
+- Run with: `python analysis/tri_score.py` (add `--chart` to save the time-series PNG, `--method minmax|hybrid|both`)
 
 ---
 
@@ -280,7 +286,7 @@ TASKIN/
 **No external library install required.** All libraries (`WiFi.h`, `esp_now.h`, `SD.h`, `SPI.h`) are included with the ESP32 board package.
 
 **Node firmware upload:**
-1. Open `firmware/node_21.02/node_21.02.ino`
+1. Open `firmware/node/node.ino`
 2. Set per-device constants:
    ```cpp
    #define NODE_ID              1    // Unique 1–10 per device
@@ -292,7 +298,7 @@ TASKIN/
 5. Upload
 
 **Hub firmware upload:**
-1. Open `firmware/merkez_10.03/merkez_10.03.ino`
+1. Open `firmware/merkez/merkez.ino`
 2. Insert formatted SD card into module
 3. *Tools → Board* → **ESP32S3 Dev Module**
 4. Upload
@@ -304,11 +310,11 @@ TASKIN/
 pip install -r requirements.txt
 
 # Auto-detect ESP32 port:
-python server.py
+python software/server.py
 
 # Specify port manually:
-python server.py --port COM12
-python server.py --port /dev/ttyUSB0
+python software/server.py --port COM12
+python software/server.py --port /dev/ttyUSB0
 ```
 
 ### 8.3 Dashboard
@@ -327,7 +333,7 @@ No build step. No npm. Single HTML file.
 
 1. Power all sensor nodes (battery or USB)
 2. Connect hub ESP32-S3 to PC via USB
-3. `python server.py --port COM12`
+3. `python software/server.py --port COM12`
 4. Open `http://127.0.0.1:8080/index.html`
 5. Nodes appear on map within ~5 seconds as ESP-NOW packets arrive
 
@@ -358,7 +364,7 @@ zaman_ms,node_id,doluluk,alarm
 
 > **[IMAGE PLACEHOLDER — Section 10a]:** PVC pipe lab setup — sensor mounted, ruler for scale
 
-**Sensor accuracy:** ±4 cm from manual reference — within HC-SR04 datasheet spec.
+**Sensor accuracy:** ±4 cm from manual reference during the early **HC-SR04 prototype** lab run; the production **JSN-SR04T** improved this to ~±1 cm and removed rain-droplet spikes.
 
 | Node | Mean Fill (%) | Max Fill (%) | Time >60% (s) | Time >80% (s) | Rise 20→80% (s) |
 |---|---|---|---|---|---|
@@ -385,13 +391,15 @@ Zero packet loss during 2-hour lab session. Serial reconnection after simulated 
 | Node 2 — Turgut Özal | 42 | 76 | 14.8 | 52 | 3 |
 | Node 3 — Sinanpaşa (Ref.) | 18 | 34 | 6.2 | 0 | 0 |
 
-**TRİ Scores** (equal-weight composite, min-max normalized — computed by `analysis/tri_score.py`):
+**TRİ Scores** (equal-weight composite — computed by `analysis/tri_score.py`):
 
 | Node | TRİ | Risk |
 |---|---|---|
 | Node 1 — Barajyolu | **81** | 🔴 Critical |
 | Node 2 — Turgut Özal | **58** | 🟠 High |
 | Node 3 — Sinanpaşa (Ref.) | **22** | 🟢 Low |
+
+> The figures above are illustrative report values. The calculator prints **both** the min-max and hybrid rankings for whatever data is in `data/samples/`; exact scores depend on the dataset (the lowest node is forced to 0 under pure min-max, which is why the hybrid method is also provided).
 
 > **[IMAGE PLACEHOLDER — Section 10b]:** Live dashboard screenshot during field session — colored markers, active log stream
 > **[IMAGE PLACEHOLDER — Section 10c]:** Time-series fill rate chart for all 3 nodes (from CSV data, output of tri_score.py extended with plotting)
@@ -407,7 +415,7 @@ Field operation was conducted in **Always-On mode** to measure system stability 
 | Component | State | Current Draw (avg.) |
 |---|---|---|
 | ESP32-DevKit V4 | Active (WiFi mode on) | ~70-90 mA |
-| HC-SR04 | Continuous measurement | ~15 mA |
+| JSN-SR04T | Continuous measurement | ~15 mA |
 | MT3608 Regulator | Loses | ~5-10 mA |
 | **Total** | **Always-On** | **~90-115 mA** |
 
@@ -419,7 +427,7 @@ Field operation was conducted in **Always-On mode** to measure system stability 
 
 | Weakness | Impact |
 |---|---|
-| HC-SR04 is not weatherproof | Rain droplets on sensor face cause measurement spikes |
+| Ultrasonic echoes off foam/turbulence | Even with the JSN-SR04T, surface turbulence can scatter echoes (mitigated by 5-sample median) |
 | NODE_ID hardcoded per flash | Multiple nodes require separate Arduino upload per device |
 | No RTC | CSV timestamps are `millis()` — relative to boot, not wall clock |
 | Single-hop ESP-NOW | All nodes must be within ~200 m of hub — no mesh or relay |
@@ -429,7 +437,7 @@ Field operation was conducted in **Always-On mode** to measure system stability 
 
 ### Recommended Improvements
 
-1. Replace HC-SR04 with waterproofed ultrasonic (MaxBotix MB7389) or radar sensor
+1. Upgrade the JSN-SR04T to a radar / MaxBotix MB7389 sensor for foam/turbulence immunity
 2. Add DS3231 RTC module to hub for absolute timestamps
 3. Implement ESP32 Deep Sleep with 1 Hz wake cycles for multi-day battery operation
 4. Add solar panel + charge controller for permanent field deployment

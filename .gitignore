@@ -55,3 +55,6 @@ $RECYCLE.BIN/
 .idea/
 *.suo
 *.user
+
+# ── Üretilen analiz çıktıları (tri_score.py) ─────
+docs/images/field_timeseries.png
