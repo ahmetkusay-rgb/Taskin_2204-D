@@ -102,6 +102,8 @@ Sistem dört katmandan oluşmaktadır:
 └────────────────────────────────────────────────────────────────┘
 ```
 
+![Sistem mimarisi: mesafe sensörü → düğüm ESP32 → merkez ESP32 (+SD) → bilgisayar köprüsü → uydu haritalı pano](docs/images/architecture.png)
+
 ### Veri Akışı
 
 1. JSN-SR04T, su yüzeyine olan mesafeyi ölçer (5 ölçümün medyanı) → float aritmetiğiyle `(derinlik − mesafe) / derinlik × 100` doluluk %'ye dönüştürülür
@@ -121,6 +123,8 @@ Sistem dört katmandan oluşmaktadır:
 | Mikrodenetleyici | ESP32-S3-N16R8 | ESP-NOW alım, SD kaydı, USB Seri çıkış |
 | SD Kart Modülü | SPI Micro SD Modülü | SD kartı ESP32-S3 SPI veri yoluna bağlar |
 | Depolama | 16 GB Micro SD Kart | `/veri_log.csv` dosyasını sürekli tutar |
+
+![Merkez birim — ESP32-S3 ve SPI micro-SD modülü](docs/images/hub_hardware.jpg)
 
 ### Sensör Düğümleri (3 adet, özdeş)
 
@@ -153,7 +157,13 @@ Her düğüm **IP67 sertifikalı 11×11×7 cm termoplastik buat** içine yerleş
 
 İç düzen: ESP32 → delikli plaket → TP4056 → MT3608 → ortak GND barası. ECHO sinyal kablosu kısa tutulmuştur.
 
-Saha ve muhafaza fotoğrafları [`docs/images/`](docs/images/) altındadır.
+![Sahaya kurulu, su geçirmez IP67 düğüm muhafazası](docs/images/node_enclosure.jpg)
+
+Saha istasyonları (soldan sağa: Barajyolu, Turgut Özal, Sinanpaşa referans), her biri bir yağmur suyu ızgarasının üzerine sabitlenmiş:
+
+| Düğüm 1 — Barajyolu | Düğüm 2 — Turgut Özal | Düğüm 3 — Sinanpaşa (Ref.) |
+|---|---|---|
+| ![Barajyolu'nda Düğüm 1](docs/images/field_node1_barajyolu.jpg) | ![Turgut Özal'da Düğüm 2](docs/images/field_node2_turgutozal.jpg) | ![Sinanpaşa'da Düğüm 3](docs/images/field_node3_sinanpasa.jpg) |
 
 ---
 
@@ -185,6 +195,16 @@ Saha ve muhafaza fotoğrafları [`docs/images/`](docs/images/) altındadır.
 | OUT+ | TP4056 OUT+ | MT3608 VIN+ | Düzenlenmiş şarj çıkışı |
 
 **Alarm sıfırlama düğmesi:** GPIO 25 (`INPUT_PULLUP`). Döngüde LOW okunursa o çevrimde alarm bayrağı sıfırlanır.
+
+**Merkez — ESP32-S3 ↔ SD modülü:**
+
+![Merkez bağlantı şeması](docs/images/wiring_hub.jpg)
+
+> Yukarıdaki Fritzing şeması varsayılan VSPI pinlerini gösterir; çalışan firmware **SPI veri yolunu GPIO 12/13/11/10'a yeniden atar** (`SPI.begin(12, 13, 11, 10)`). Bağlantıyı [`docs/hardware/baglanti_semasi.md`](docs/hardware/baglanti_semasi.md) tablosuna göre yapın.
+
+**Düğüm — ESP32 ↔ ultrasonik sensör ↔ güç zinciri** (şema HC-SR04 prototipini gösterir; JSN-SR04T aynı TRIG/ECHO pinlerini kullanır):
+
+![Düğüm bağlantı şeması](docs/images/wiring_node.png)
 
 > Tam pin tabloları: [`docs/hardware/baglanti_semasi.md`](docs/hardware/baglanti_semasi.md)
 
@@ -350,6 +370,8 @@ zaman_ms,node_id,doluluk,alarm
 
 **Düzenek:** 100 cm derinliğinde PVC boru, 2 saat boyunca su seviyesi kademeli artırılıp düşürüldü. Düğüm başına 7.200 örnek.
 
+![Kontrollü laboratuvar test düzeneği — PVC borular üzerinde üç düğüm ve çalışan köprü](docs/images/lab_setup.jpg)
+
 **Sensör doğruluğu:** İlk **HC-SR04 prototip** laboratuvar oturumunda manuel referansa göre ±4 cm sapma ölçüldü; üretim **JSN-SR04T** bunu ~±1 cm'ye iyileştirdi ve yağmur damlacığı sıçramalarını giderdi.
 
 | Düğüm | Ort. Doluluk (%) | Maks. Doluluk (%) | >%60 Süresi (sn) | >%80 Süresi (sn) | %20→%80 Artışı (sn) |
@@ -363,6 +385,8 @@ zaman_ms,node_id,doluluk,alarm
 ### Saha Testi — Adana, 9–11 Şubat 2026
 
 **Koşullar:** Gerçek kentsel drenaj konumları; oturum başına 1,5–9,5 mm yağış.
+
+![Canlı pano — Adana uydu haritası, renk kodlu düğüm işaretçileri ve canlı veri akışı](docs/images/dashboard.jpg)
 
 | Tarih | Düğüm | Konum | Yağış |
 |---|---|---|---|
@@ -390,6 +414,10 @@ Barajyolu yalnızca en çok dolan nokta değil — varyansı da en yüksek, %80 
 | Düğüm 3 — Sinanpaşa (Ref.) | **9** | 🟢 Düşük |
 
 > **Yöntem & duyarlılık (AR-GE).** Üç nokta üç ayrı risk sınıfına düşüyor. Başlangıçta her parametreyi min-maks ile normalize ettik; ancak tek bir normalizasyon, zaten 0–100% fiziksel ölçekteki ortalama ve maksimum için uygun değil — bu yüzden yukarıdaki karma şemaya geçtik. Duyarlılık kontrolü sağlamlığı doğruluyor: saf min-maks'ta (`--method minmax`) skorlar kayıyor ama Barajyolu net şekilde #1 kalıyor ve genel sıralama değişmiyor — eşit ağırlık tercihi bu nedenle savunulabilir.
+
+Düğüm başına oturum boyunca doluluk (yeniden üretmek için: `python analysis/tri_score.py --chart`):
+
+![Üç düğüm için zaman serisi doluluk eğrisi](docs/images/field_timeseries.jpg)
 
 ---
 

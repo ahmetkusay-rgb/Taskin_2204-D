@@ -103,6 +103,8 @@ The system has four layers:
 └────────────────────────────────────────────────────────────────┘
 ```
 
+![System architecture: distance sensor → node ESP32 → hub ESP32 (+SD) → PC bridge → satellite-map dashboard](docs/images/architecture.png)
+
 ### Data Flow
 
 1. JSN-SR04T measures distance to water surface (median of 5 samples) → converted to fill% via float arithmetic `(depth − distance) / depth × 100`
@@ -122,6 +124,8 @@ The system has four layers:
 | Microcontroller | ESP32-S3-N16R8 | Receives ESP-NOW, runs SD logging, outputs USB Serial |
 | SD card module | SPI Micro SD Module | Interfaces SD card to ESP32-S3 SPI bus |
 | Storage | 16 GB Micro SD Card | Stores `/veri_log.csv` continuously |
+
+![Hub unit — ESP32-S3 with SPI micro-SD module](docs/images/hub_hardware.jpg)
 
 ### Sensor Nodes (3×, identical)
 
@@ -155,7 +159,13 @@ Each node is enclosed in an **IP67-rated 11×11×7 cm thermoplastic box**. The J
 
 Internal layout: ESP32 → perforated PCB board → TP4056 → MT3608 → shared GND bus. Wiring kept short to minimize noise on the ECHO signal line.
 
-Field and enclosure photos are in [`docs/images/`](docs/images/).
+![Sealed IP67 node enclosure mounted in the field](docs/images/node_enclosure.jpg)
+
+Field stations (left→right: Barajyolu, Turgut Özal, Sinanpaşa reference), each fixed over a stormwater grate:
+
+| Node 1 — Barajyolu | Node 2 — Turgut Özal | Node 3 — Sinanpaşa (Ref.) |
+|---|---|---|
+| ![Node 1 at Barajyolu](docs/images/field_node1_barajyolu.jpg) | ![Node 2 at Turgut Özal](docs/images/field_node2_turgutozal.jpg) | ![Node 3 at Sinanpaşa](docs/images/field_node3_sinanpasa.jpg) |
 
 ---
 
@@ -187,6 +197,16 @@ Field and enclosure photos are in [`docs/images/`](docs/images/).
 | OUT+ | TP4056 OUT+ | MT3608 VIN+ | Regulated charge to boost converter |
 
 **Alarm reset button:** GPIO 25 (`INPUT_PULLUP`). Reads LOW during loop → zeros alarm flag for that cycle.
+
+**Hub — ESP32-S3 ↔ SD module:**
+
+![Hub wiring diagram](docs/images/wiring_hub.jpg)
+
+> The Fritzing diagram above shows default VSPI pins; the shipped firmware **remaps the SPI bus to GPIO 12/13/11/10** (`SPI.begin(12, 13, 11, 10)`). Wire per the pin table in [`docs/hardware/baglanti_semasi.md`](docs/hardware/baglanti_semasi.md).
+
+**Node — ESP32 ↔ ultrasonic sensor ↔ power chain** (diagram shows the HC-SR04 prototype; JSN-SR04T uses the same TRIG/ECHO pins):
+
+![Node wiring diagram](docs/images/wiring_node.png)
 
 > Full pin tables: [`docs/hardware/baglanti_semasi.md`](docs/hardware/baglanti_semasi.md)
 
@@ -354,6 +374,8 @@ zaman_ms,node_id,doluluk,alarm
 
 **Setup:** 100 cm-deep PVC pipe, water raised and lowered over 2 hours. 7,200 samples per node.
 
+![Controlled laboratory test setup — three nodes on PVC pipes with the bridge running](docs/images/lab_setup.jpg)
+
 **Sensor accuracy:** ±4 cm from manual reference during the early **HC-SR04 prototype** lab run; the production **JSN-SR04T** improved this to ~±1 cm and removed rain-droplet spikes.
 
 | Node | Mean Fill (%) | Max Fill (%) | Time >60% (s) | Time >80% (s) | Rise 20→80% (s) |
@@ -367,6 +389,8 @@ Zero packet loss during 2-hour lab session. Serial reconnection after simulated 
 ### Field Test — Adana, Feb 9–11, 2026
 
 **Conditions:** Real urban drainage locations; rainfall 1.5–9.5 mm/session.
+
+![Live dashboard — satellite map of Adana with color-coded node markers and live data stream](docs/images/dashboard.jpg)
 
 | Date | Node | Location | Rainfall |
 |---|---|---|---|
@@ -394,6 +418,10 @@ Barajyolu is not just the highest-mean node — it also has the highest variance
 | Node 3 — Sinanpaşa (Ref.) | **9** | 🟢 Low |
 
 > **Methodology & sensitivity (AR-GE).** The three points fall into three distinct risk classes. We first normalized every parameter with min-max, but a single normalization is ill-suited to mean and max (already on a physical 0–100% scale), so we moved to the hybrid scheme above. A sensitivity check confirms robustness: under pure min-max (`--method minmax`) the scores shift but Barajyolu stays the clear #1 and the overall ranking is unchanged — which is why the equal-weight choice is defensible.
+
+Per-node fill over each session (regenerate with `python analysis/tri_score.py --chart`):
+
+![Time-series fill rate for all three nodes](docs/images/field_timeseries.jpg)
 
 ---
 
