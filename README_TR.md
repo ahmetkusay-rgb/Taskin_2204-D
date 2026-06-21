@@ -175,12 +175,12 @@ Saha istasyonları (soldan sağa: Barajyolu, Turgut Özal, Sinanpaşa referans),
 |---|---|---|
 | GND | GND | Ortak toprak |
 | VCC | 5V | USB'den güç |
-| MISO | GPIO 13 | SPI veri girişi |
-| MOSI | GPIO 11 | SPI veri çıkışı |
-| SCK | GPIO 12 | SPI saat sinyali |
-| CS | GPIO 10 | Chip Select (aktif-düşük) |
+| MISO | GPIO 19 | SPI veri girişi |
+| MOSI | GPIO 23 | SPI veri çıkışı |
+| SCK | GPIO 18 | SPI saat sinyali |
+| CS | GPIO 5 | Chip Select (aktif-düşük) |
 
-> **Not:** ESP32-S3 varsayılan SPI pinleri farklıdır. Firmware `SPI.begin(12, 13, 11, 10)` ile özel pin ataması yapar.
+> **Not:** Firmware veri yolunu `SPI.begin(18, 19, 23, 5)` ile başlatır; pinler EK-5.1 bağlantı şemasıyla aynıdır.
 
 ### Düğüm: ESP32 ↔ JSN-SR04T ↔ Güç Zinciri
 
@@ -200,7 +200,7 @@ Saha istasyonları (soldan sağa: Barajyolu, Turgut Özal, Sinanpaşa referans),
 
 ![Merkez bağlantı şeması](docs/images/wiring_hub.jpg)
 
-> Yukarıdaki Fritzing şeması varsayılan VSPI pinlerini gösterir; çalışan firmware **SPI veri yolunu GPIO 12/13/11/10'a yeniden atar** (`SPI.begin(12, 13, 11, 10)`). Bağlantıyı [`docs/hardware/baglanti_semasi.md`](docs/hardware/baglanti_semasi.md) tablosuna göre yapın.
+> Pinler firmware ile aynıdır (`SPI.begin(18, 19, 23, 5)`); tam tablo: [`docs/hardware/baglanti_semasi.md`](docs/hardware/baglanti_semasi.md).
 
 **Düğüm — ESP32 ↔ ultrasonik sensör ↔ güç zinciri** (şema HC-SR04 prototipini gösterir; JSN-SR04T aynı TRIG/ECHO pinlerini kullanır):
 
@@ -246,7 +246,7 @@ Taskin_2204-D/
 
 ### `merkez.ino` — Merkez Birim
 
-- Özel SPI başlatma: `SPI.begin(12, 13, 11, 10)` — varsayılan dışı pinler zorunludur
+- SPI başlatma: `SPI.begin(18, 19, 23, 5)` (SCK, MISO, MOSI, CS) — EK-5.1 bağlantı şemasıyla aynı
 - İlk açılışta başlık satırıyla `/veri_log.csv` oluşturur
 - **SD kurtarma:** yazma başarısız olursa veya kart düşerse `sdKurtarmaDene()` kartı yeniden başlatır (cooldown'lı) ve tekrar dener; sorunluyken `SD_FAIL,node_id`, geri gelince `SD_RECOVERED` satırı yazar
 - `OnDataRecv()` geri çağrısı: node_id [1,10] aralığını, doluluk [0,100] kısıtını, alarm {0,1} geçerliliğini denetler

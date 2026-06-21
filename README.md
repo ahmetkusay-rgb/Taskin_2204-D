@@ -177,12 +177,12 @@ Field stations (left→right: Barajyolu, Turgut Özal, Sinanpaşa reference), ea
 |---|---|---|
 | GND | GND | Common ground |
 | VCC | 5V | Module powered from USB |
-| MISO | GPIO 13 | SPI data input |
-| MOSI | GPIO 11 | SPI data output |
-| SCK | GPIO 12 | SPI clock |
-| CS | GPIO 10 | Chip select (active LOW) |
+| MISO | GPIO 19 | SPI data input |
+| MOSI | GPIO 23 | SPI data output |
+| SCK | GPIO 18 | SPI clock |
+| CS | GPIO 5 | Chip select (active LOW) |
 
-> **Note:** These are non-default SPI pins for ESP32-S3. The firmware uses `SPI.begin(12, 13, 11, 10)` explicitly.
+> **Note:** The firmware initializes the bus explicitly with `SPI.begin(18, 19, 23, 5)`, matching the EK-5.1 wiring diagram.
 
 ### Node: ESP32 ↔ JSN-SR04T ↔ Power Chain
 
@@ -202,7 +202,7 @@ Field stations (left→right: Barajyolu, Turgut Özal, Sinanpaşa reference), ea
 
 ![Hub wiring diagram](docs/images/wiring_hub.jpg)
 
-> The Fritzing diagram above shows default VSPI pins; the shipped firmware **remaps the SPI bus to GPIO 12/13/11/10** (`SPI.begin(12, 13, 11, 10)`). Wire per the pin table in [`docs/hardware/baglanti_semasi.md`](docs/hardware/baglanti_semasi.md).
+> Pins match the firmware (`SPI.begin(18, 19, 23, 5)`); full table in [`docs/hardware/baglanti_semasi.md`](docs/hardware/baglanti_semasi.md).
 
 **Node — ESP32 ↔ ultrasonic sensor ↔ power chain** (diagram shows the HC-SR04 prototype; JSN-SR04T uses the same TRIG/ECHO pins):
 
@@ -248,7 +248,7 @@ Taskin_2204-D/
 
 ### `merkez.ino` — Hub
 
-- Custom SPI bus init: `SPI.begin(12, 13, 11, 10)` — non-default pins required
+- SPI bus init: `SPI.begin(18, 19, 23, 5)` (SCK, MISO, MOSI, CS) — matches the EK-5.1 wiring diagram
 - Creates `/veri_log.csv` with header row on first boot
 - **SD recovery:** if a write fails or the card drops, `sdKurtarmaDene()` re-initializes the card (cooldown-limited) and retries; emits `SD_FAIL,node_id` while degraded and `SD_RECOVERED` on reconnect
 - `OnDataRecv()` callback: validates node_id ∈ [1,10], clamps fill to [0,100], validates alarm ∈ {0,1}
