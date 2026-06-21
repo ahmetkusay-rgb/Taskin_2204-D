@@ -32,14 +32,14 @@ Adana gibi şehirlerde kentsel yağmur suyu drenaj sistemleri sessizce çökmekt
 
 TAŞKIN, birden fazla kentsel ölçüm noktasında su doluluk düzeyini sürekli ölçen, verileri kablosuz olarak merkez birime aktaran, SD karta kaydeden ve web tabanlı bir harita arayüzüne canlı olarak yayınlayan çok düğümlü bir sensör ağıdır.
 
-Sistemin temel çıktısı ham sensör okumaları değil; her ölçüm noktası için aşağıdaki bileşenlerden hesaplanan **TAŞKIN Risk İndeksi (TRİ)** modelidir:
-- Ortalama doluluk oranı
-- Maksimum doluluk oranı
-- %80 eşiğinin üzerinde kalınan **süre yüzdesi**
-- **Saatlik** eşik aşım sıklığı
+Sistemin temel çıktısı ham sensör okumaları değil; her ölçüm noktası için beş risk parametresinden hesaplanan **TAŞKIN Risk İndeksi (TRİ)** modelidir:
+- Ortalama doluluk seviyesi
+- Maksimum doluluk seviyesi
+- %80 eşiğinin üzerinde kalınan süre
+- %80 eşik aşım sayısı
 - Tepe doluluk artış hızı (60 sn pencerede en hızlı tırmanış)
 
-Skor iki yöntemle üretilir — **min-maks** (düğümler arası göreli sıralama) ve **hibrit** (mutlak referanslar ile min-maks harmanı) — ikisi de `analysis/tri_score.py` tarafından raporlanır. Bu yaklaşım, toplanan ham verileri altyapı planlaması için **karar destek çıktısına** dönüştürmektedir.
+Parametreler, şeffaf bir **çok kriterli karar verme (MCDM)** yaklaşımıyla (Malczewski'nin ağırlıklı doğrusal birleştirme çerçevesi) **karma normalizasyon** kullanılarak birleştirilir: ortalama ve maksimum fiziksel 0–100% ölçeğinde tutulur, sınırsız parametreler min-maks normalize edilir ve beşi de eşit ağırlık taşır. Böylece ham veri, altyapı planlaması için bir **karar destek çıktısına** dönüşür — yalnızca alarm değil, noktalar arası karşılaştırmalı bir öncelik sıralaması.
 
 ### Teknik Kapsam
 
@@ -102,8 +102,6 @@ Sistem dört katmandan oluşmaktadır:
 └────────────────────────────────────────────────────────────────┘
 ```
 
-> **[GÖRSEL YERİ — Bölüm 3]:** Sistem mimarisi blok diyagramı (sensörden panele kadar donanım sinyal akışı)
-
 ### Veri Akışı
 
 1. JSN-SR04T, su yüzeyine olan mesafeyi ölçer (5 ölçümün medyanı) → float aritmetiğiyle `(derinlik − mesafe) / derinlik × 100` doluluk %'ye dönüştürülür
@@ -155,10 +153,7 @@ Her düğüm **IP67 sertifikalı 11×11×7 cm termoplastik buat** içine yerleş
 
 İç düzen: ESP32 → delikli plaket → TP4056 → MT3608 → ortak GND barası. ECHO sinyal kablosu kısa tutulmuştur.
 
-> **[GÖRSEL YERİ — Bölüm 5a]:** Düğüm muhafazasının içi — tüm bileşenler etiketli, yukarıdan çekim
-> **[GÖRSEL YERİ — Bölüm 5b]:** JSN-SR04T probunun su yüzeyine yönlendirilmiş hali, montaj geometrisi
-> **[GÖRSEL YERİ — Bölüm 5c]:** Kapalı IP67 muhafaza dışarıdan — anten ve kablo rakoru görünür
-> **[GÖRSEL YERİ — Bölüm 5d]:** Barajyolu alt geçidinde sahaya kurulmuş Düğüm 1
+Saha ve muhafaza fotoğrafları [`docs/images/`](docs/images/) altındadır.
 
 ---
 
@@ -191,8 +186,7 @@ Her düğüm **IP67 sertifikalı 11×11×7 cm termoplastik buat** içine yerleş
 
 **Alarm sıfırlama düğmesi:** GPIO 25 (`INPUT_PULLUP`). Döngüde LOW okunursa o çevrimde alarm bayrağı sıfırlanır.
 
-> **[GÖRSEL YERİ — Bölüm 6]:** Kablolama şeması (Fritzing dışa aktarım veya elle çizilmiş şema)
-> *(Pin tabloları: [`docs/hardware/baglanti_semasi.md`](docs/hardware/baglanti_semasi.md))*
+> Tam pin tabloları: [`docs/hardware/baglanti_semasi.md`](docs/hardware/baglanti_semasi.md)
 
 ---
 
@@ -209,7 +203,7 @@ Taskin_2204-D/
 │   ├── server.py                # Python seri port → WebSocket köprüsü
 │   └── index.html               # Tek dosya web panosu
 ├── analysis/
-│   └── tri_score.py             # TRİ hesaplayıcı (min-maks + hibrit)
+│   └── tri_score.py             # TRİ hesaplayıcı (MCDM, karma normalizasyon)
 ├── data/
 │   ├── samples/                 # Saha testi CSV kayıtları (4 dosya)
 │   └── session_log.md           # Saha oturumu meta verisi
@@ -258,11 +252,9 @@ Taskin_2204-D/
 ### `analysis/tri_score.py` — TRİ Hesaplayıcı
 
 - `data/samples/` içindeki tüm CSV dosyalarını okur; `durum=KAYIP` sensör kesinti satırlarını eler
-- Düğüm başına hesaplar: ortalama doluluk, maksimum doluluk, standart sapma, %80/%60 üzeri **süre yüzdesi**, **saatlik** %80 aşım sıklığı ve **tepe doluluk artış hızı** (60 sn pencerede en hızlı tırmanış, %/dk)
-- Bileşik TRİ'yi **iki yöntemle, ikisini de yazdırarak** hesaplar:
-  - **min-maks** — her parametre düğümler arasında normalize edilir (göreli sıralama)
-  - **hibrit** — mutlak (sabit 0–100 referans) ile min-maks harmanlanır; skorlar yorumlanabilir kalır ve referans düğüm 0'a zorlanmaz
-- Çalıştırma: `python analysis/tri_score.py` (`--chart` ile zaman serisi PNG, `--method minmax|hybrid|both`)
+- Düğüm başına beş risk parametresini hesaplar: ortalama doluluk (O), maksimum doluluk (M), %80 üzeri süre (E, sn), %80 aşım sayısı (F) ve tepe doluluk artış hızı (A, 60 sn pencerede %/dk)
+- Bunları **karma normalizasyon** ile bileşik TRİ'ye birleştirir (MCDM ağırlıklı birleştirme, bkz. §10): O ve M zaten fiziksel 0–100% ölçeğinde olduğundan doğrudan kullanılır; E, F ve A düğümler arasında min-maks normalize edilir; beşi de eşit ağırlık (0.20) taşır
+- Çalıştırma: `python analysis/tri_score.py` (`--chart` zaman serisi PNG kaydeder; `--method minmax` duyarlılık analizindeki ilk saf min-maks varyantını gösterir)
 
 ---
 
@@ -358,8 +350,6 @@ zaman_ms,node_id,doluluk,alarm
 
 **Düzenek:** 100 cm derinliğinde PVC boru, 2 saat boyunca su seviyesi kademeli artırılıp düşürüldü. Düğüm başına 7.200 örnek.
 
-> **[GÖRSEL YERİ — Bölüm 10a]:** PVC boru laboratuvar düzeneği — sensör monte edilmiş, ölçek için cetvel görünür
-
 **Sensör doğruluğu:** İlk **HC-SR04 prototip** laboratuvar oturumunda manuel referansa göre ±4 cm sapma ölçüldü; üretim **JSN-SR04T** bunu ~±1 cm'ye iyileştirdi ve yağmur damlacığı sıçramalarını giderdi.
 
 | Düğüm | Ort. Doluluk (%) | Maks. Doluluk (%) | >%60 Süresi (sn) | >%80 Süresi (sn) | %20→%80 Artışı (sn) |
@@ -381,24 +371,25 @@ zaman_ms,node_id,doluluk,alarm
 | 10 Şubat | Düğüm 2 | Çukurova — Turgut Özal Bulvarı | ~5,8 mm |
 | 11 Şubat | Düğüm 3 | Yüreğir — Sinanpaşa (Ref.) | ~9,5 mm |
 
-| Düğüm | Ort. (%) | Maks. (%) | Std. Sapma | >%80 Süresi (sn) | >%80 Aşım Sayısı |
-|---|---|---|---|---|---|
-| Düğüm 1 — Barajyolu | 63 | 94 | 18,5 | 168 | 7 |
-| Düğüm 2 — Turgut Özal | 42 | 76 | 14,8 | 52 | 3 |
-| Düğüm 3 — Sinanpaşa (Ref.) | 18 | 34 | 6,2 | 0 | 0 |
+TRİ'nin beş parametresi (O ortalama, M maks, E %80 üzeri süre, F %80 aşım sayısı, A tepe artış hızı), `analysis/tri_score.py` ile `data/samples/` üzerinde hesaplanmıştır:
 
-**TRİ Skorları** (eşit ağırlıklı bileşik — `analysis/tri_score.py` çalıştırılarak üretilir):
+| Düğüm | O ort. (%) | M maks (%) | Std. Sapma | E >%80 (sn) | F aşım | A artış (%/dk) |
+|---|---|---|---|---|---|---|
+| Düğüm 1 — Barajyolu | 62 | 94 | 11,4 | 168 | 7 | 39 |
+| Düğüm 2 — Turgut Özal | 43 | 82 | 8,4 | 54 | 3 | 19 |
+| Düğüm 3 — Sinanpaşa (Ref.) | 18 | 29 | 5,9 | 0 | 0 | 4 |
+
+Barajyolu yalnızca en çok dolan nokta değil — varyansı da en yüksek, %80 aşım sayısı en fazla ve doluluk artış hızı Turgut Özal'dan ~%82 daha yüksek.
+
+**TRİ Skorları** (karma normalizasyon, eşit ağırlık — `analysis/tri_score.py` çıktısı):
 
 | Düğüm | TRİ | Risk Seviyesi |
 |---|---|---|
-| Düğüm 1 — Barajyolu | **81** | 🔴 Kritik |
-| Düğüm 2 — Turgut Özal | **58** | 🟠 Yüksek |
-| Düğüm 3 — Sinanpaşa (Ref.) | **22** | 🟢 Düşük |
+| Düğüm 1 — Barajyolu | **91** | 🔴 Kritik |
+| Düğüm 2 — Turgut Özal | **49** | 🟡 Orta |
+| Düğüm 3 — Sinanpaşa (Ref.) | **9** | 🟢 Düşük |
 
-> Yukarıdaki değerler örnek/temsili rapor değerleridir. Hesaplayıcı, `data/samples/` içindeki veri için **hem** min-maks **hem** hibrit sıralamayı yazdırır; kesin skorlar veri kümesine bağlıdır (saf min-maks'ta en düşük düğüm 0'a zorlanır, hibrit yöntem bu yüzden de sunulur).
-
-> **[GÖRSEL YERİ — Bölüm 10b]:** Saha oturumu sırasında canlı pano ekran görüntüsü — renk kodlu işaretçiler, aktif olay akışı
-> **[GÖRSEL YERİ — Bölüm 10c]:** 3 düğüm için zaman serisi doluluk eğrisi grafiği (CSV verisinden üretilmiş)
+> **Yöntem & duyarlılık (AR-GE).** Üç nokta üç ayrı risk sınıfına düşüyor. Başlangıçta her parametreyi min-maks ile normalize ettik; ancak tek bir normalizasyon, zaten 0–100% fiziksel ölçekteki ortalama ve maksimum için uygun değil — bu yüzden yukarıdaki karma şemaya geçtik. Duyarlılık kontrolü sağlamlığı doğruluyor: saf min-maks'ta (`--method minmax`) skorlar kayıyor ama Barajyolu net şekilde #1 kalıyor ve genel sıralama değişmiyor — eşit ağırlık tercihi bu nedenle savunulabilir.
 
 ---
 

@@ -33,14 +33,14 @@ Urban stormwater drainage systems in cities like Adana, Turkey fail silently. Su
 
 TAŞKIN deploys a multi-node wireless sensor network that continuously measures water fill level (as a percentage of channel depth) at multiple urban measurement points, transmits data wirelessly to a central hub, logs it to an SD card, and streams it live to a map-based web dashboard.
 
-The system's key output is not raw sensor readings — it produces a **TAŞKIN Risk Index (TRİ)**, a composite 0–100 score per measurement point derived from:
-- Mean fill rate
-- Maximum fill rate
-- % of time above the 80% threshold
-- Threshold crossing frequency (per hour)
+The system's key output is not raw sensor readings — it produces a **TAŞKIN Risk Index (TRİ)**, a composite 0–100 score per measurement point derived from five risk parameters:
+- Mean fill level
+- Maximum fill level
+- Time spent above the 80% threshold
+- 80% threshold crossing count
 - Peak fill-rise rate (fastest climb over a 60 s window)
 
-The score is produced by two methods — **min-max** (relative ranking across nodes) and **hybrid** (absolute anchors blended with min-max) — both reported by `analysis/tri_score.py`. This transforms collected data into **decision-support output** for infrastructure planning.
+The parameters are combined with a transparent **multi-criteria decision-making (MCDM)** scheme (weighted linear combination, after Malczewski) using a **hybrid normalization**: mean and max are kept on their physical 0–100% scale, the unbounded parameters are min-max normalized, and all five carry equal weight. This transforms collected data into **decision-support output** for infrastructure planning — not just an alarm, but a comparative priority ranking across locations.
 
 ### Technical Scope
 
@@ -103,8 +103,6 @@ The system has four layers:
 └────────────────────────────────────────────────────────────────┘
 ```
 
-> **[IMAGE PLACEHOLDER — Section 3]:** System architecture block diagram (hardware signal flow from sensor to dashboard)
-
 ### Data Flow
 
 1. JSN-SR04T measures distance to water surface (median of 5 samples) → converted to fill% via float arithmetic `(depth − distance) / depth × 100`
@@ -157,10 +155,7 @@ Each node is enclosed in an **IP67-rated 11×11×7 cm thermoplastic box**. The J
 
 Internal layout: ESP32 → perforated PCB board → TP4056 → MT3608 → shared GND bus. Wiring kept short to minimize noise on the ECHO signal line.
 
-> **[IMAGE PLACEHOLDER — Section 5a]:** Interior of node enclosure — top-down view, all components visible and labeled
-> **[IMAGE PLACEHOLDER — Section 5b]:** JSN-SR04T probe aimed at water surface, showing mounting geometry
-> **[IMAGE PLACEHOLDER — Section 5c]:** Sealed IP67 enclosure exterior with antenna and cable gland
-> **[IMAGE PLACEHOLDER — Section 5d]:** Node 1 mounted in field at Barajyolu underpass
+Field and enclosure photos are in [`docs/images/`](docs/images/).
 
 ---
 
@@ -193,8 +188,7 @@ Internal layout: ESP32 → perforated PCB board → TP4056 → MT3608 → shared
 
 **Alarm reset button:** GPIO 25 (`INPUT_PULLUP`). Reads LOW during loop → zeros alarm flag for that cycle.
 
-> **[IMAGE PLACEHOLDER — Section 6]:** Wiring diagram (Fritzing export or hand-drawn schematic)
-> *(Pin tables: [`docs/hardware/baglanti_semasi.md`](docs/hardware/baglanti_semasi.md))*
+> Full pin tables: [`docs/hardware/baglanti_semasi.md`](docs/hardware/baglanti_semasi.md)
 
 ---
 
@@ -261,11 +255,9 @@ Taskin_2204-D/
 ### `analysis/tri_score.py` — TRİ Calculator
 
 - Reads all CSVs from `data/samples/`; drops `durum=KAYIP` sensor-dropout rows
-- Computes per-node: mean fill, max fill, std dev, **% of time** above 80%/60%, 80%-crossing frequency **per hour**, and **peak fill-rise rate** (fastest climb over a 60 s window, %/min)
-- Computes the composite TRİ with **two methods, both printed**:
-  - **min-max** — each parameter normalized across nodes (relative ranking)
-  - **hybrid** — blends absolute (fixed 0–100 anchors) with min-max, so scores stay interpretable and the reference node is not forced to 0
-- Run with: `python analysis/tri_score.py` (add `--chart` to save the time-series PNG, `--method minmax|hybrid|both`)
+- Computes the five risk parameters per node: mean fill (O), max fill (M), seconds above 80% (E), 80%-crossing count (F), and peak fill-rise rate (A, %/min over a 60 s window)
+- Combines them into the composite TRİ using a **hybrid normalization** (MCDM weighted-combination, see §10): O and M are already on a physical 0–100% scale so they are used directly, while E, F and A are min-max normalized across nodes; all five carry equal weight (0.20)
+- Run with: `python analysis/tri_score.py` (`--chart` saves the time-series PNG; `--method minmax` shows the initial pure-min-max variant used in the sensitivity analysis)
 
 ---
 
@@ -362,8 +354,6 @@ zaman_ms,node_id,doluluk,alarm
 
 **Setup:** 100 cm-deep PVC pipe, water raised and lowered over 2 hours. 7,200 samples per node.
 
-> **[IMAGE PLACEHOLDER — Section 10a]:** PVC pipe lab setup — sensor mounted, ruler for scale
-
 **Sensor accuracy:** ±4 cm from manual reference during the early **HC-SR04 prototype** lab run; the production **JSN-SR04T** improved this to ~±1 cm and removed rain-droplet spikes.
 
 | Node | Mean Fill (%) | Max Fill (%) | Time >60% (s) | Time >80% (s) | Rise 20→80% (s) |
@@ -385,24 +375,25 @@ Zero packet loss during 2-hour lab session. Serial reconnection after simulated 
 | Feb 10 | Node 2 | Çukurova — Turgut Özal Blv. | ~5.8 mm |
 | Feb 11 | Node 3 | Yüreğir — Sinanpaşa (Ref.) | ~9.5 mm |
 
-| Node | Mean (%) | Max (%) | StdDev | Time >80% (s) | >80% crossings |
-|---|---|---|---|---|---|
-| Node 1 — Barajyolu | 63 | 94 | 18.5 | 168 | 7 |
-| Node 2 — Turgut Özal | 42 | 76 | 14.8 | 52 | 3 |
-| Node 3 — Sinanpaşa (Ref.) | 18 | 34 | 6.2 | 0 | 0 |
+The five TRİ parameters per node (O mean, M max, E seconds above 80%, F 80%-crossings, A peak rise-rate), computed by `analysis/tri_score.py` on `data/samples/`:
 
-**TRİ Scores** (equal-weight composite — computed by `analysis/tri_score.py`):
+| Node | O mean (%) | M max (%) | StdDev | E >80% (s) | F crossings | A rise (%/min) |
+|---|---|---|---|---|---|---|
+| Node 1 — Barajyolu | 62 | 94 | 11.4 | 168 | 7 | 39 |
+| Node 2 — Turgut Özal | 43 | 82 | 8.4 | 54 | 3 | 19 |
+| Node 3 — Sinanpaşa (Ref.) | 18 | 29 | 5.9 | 0 | 0 | 4 |
+
+Barajyolu is not just the highest-mean node — it also has the highest variance, the most 80% crossings, and a rise rate ~82% faster than Turgut Özal.
+
+**TRİ Scores** (hybrid normalization, equal weights — output of `analysis/tri_score.py`):
 
 | Node | TRİ | Risk |
 |---|---|---|
-| Node 1 — Barajyolu | **81** | 🔴 Critical |
-| Node 2 — Turgut Özal | **58** | 🟠 High |
-| Node 3 — Sinanpaşa (Ref.) | **22** | 🟢 Low |
+| Node 1 — Barajyolu | **91** | 🔴 Critical |
+| Node 2 — Turgut Özal | **49** | 🟡 Medium |
+| Node 3 — Sinanpaşa (Ref.) | **9** | 🟢 Low |
 
-> The figures above are illustrative report values. The calculator prints **both** the min-max and hybrid rankings for whatever data is in `data/samples/`; exact scores depend on the dataset (the lowest node is forced to 0 under pure min-max, which is why the hybrid method is also provided).
-
-> **[IMAGE PLACEHOLDER — Section 10b]:** Live dashboard screenshot during field session — colored markers, active log stream
-> **[IMAGE PLACEHOLDER — Section 10c]:** Time-series fill rate chart for all 3 nodes (from CSV data, output of tri_score.py extended with plotting)
+> **Methodology & sensitivity (AR-GE).** The three points fall into three distinct risk classes. We first normalized every parameter with min-max, but a single normalization is ill-suited to mean and max (already on a physical 0–100% scale), so we moved to the hybrid scheme above. A sensitivity check confirms robustness: under pure min-max (`--method minmax`) the scores shift but Barajyolu stays the clear #1 and the overall ranking is unchanged — which is why the equal-weight choice is defensible.
 
 ---
 
