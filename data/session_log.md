@@ -18,7 +18,7 @@
 | Coordinates | [37.022, 35.322] |
 | Weather | Light rain, ~1.5 mm recorded |
 | CSV file | `saha_node1_09subat_s1_11-14.csv` |
-| Notes | Low-intensity rainfall session; baseline fill behavior established |
+| Notes | Low-intensity rainfall session; fill stayed below the 80% alarm threshold (baseline behavior) |
 
 ---
 
@@ -35,7 +35,7 @@
 | Coordinates | [37.022, 35.322] |
 | Weather | Increasing rain, ~4.2 mm recorded |
 | CSV file | `saha_node1_09subat_s2_16-19.csv` |
-| Notes | Fill rate increased significantly vs Session 1; alarm threshold crossed 4× |
+| Notes | Fill rate increased significantly vs Session 1; 80% alarm threshold crossed 7×, peak fill 94% |
 
 ---
 
@@ -51,8 +51,8 @@
 | Location | Çukurova — Turgut Özal Bulvarı |
 | Coordinates | [37.048, 35.279] |
 | Weather | Moderate rain, ~5.8 mm recorded |
-| CSV file | `saha_node2_10800.csv` |
-| Notes | High impervious surface area; faster runoff than Node 1 but lower absolute fill |
+| CSV file | `saha_node2_10subat_12-15.csv` |
+| Notes | High impervious surface area; frequently exceeds 60%, peak 82% (lower absolute fill than Node 1) |
 
 ---
 
