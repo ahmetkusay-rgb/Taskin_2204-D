@@ -8,6 +8,8 @@ TAŞKIN merkez birimi ve sensör düğümleri için pin bağlantıları. Pin num
 
 Firmware özel SPI başlatma yapar: `SPI.begin(12, 13, 11, 10)` (SCK, MISO, MOSI, CS). Bunlar ESP32-S3 için varsayılan dışı SPI pinleridir.
 
+> **Not:** Rapordaki EK-5.1 Fritzing şeması varsayılan VSPI pinlerini (MISO 19 / MOSI 23 / SCK 18 / CS 5) gösterir. Çalışan firmware bu pinleri aşağıdaki tabloya yeniden atar; bağlantıyı **bu tabloya göre** yapın.
+
 | SD Modül Pini | ESP32-S3 GPIO | Not |
 |---|---|---|
 | GND | GND | Ortak toprak |
