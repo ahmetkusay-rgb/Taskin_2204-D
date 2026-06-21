@@ -6,18 +6,16 @@ TAŞKIN merkez birimi ve sensör düğümleri için pin bağlantıları. Pin num
 
 ## Merkez: ESP32-S3 ↔ Micro SD Kart Modülü
 
-Firmware özel SPI başlatma yapar: `SPI.begin(12, 13, 11, 10)` (SCK, MISO, MOSI, CS). Bunlar ESP32-S3 için varsayılan dışı SPI pinleridir.
-
-> **Not:** Rapordaki EK-5.1 Fritzing şeması varsayılan VSPI pinlerini (MISO 19 / MOSI 23 / SCK 18 / CS 5) gösterir. Çalışan firmware bu pinleri aşağıdaki tabloya yeniden atar; bağlantıyı **bu tabloya göre** yapın.
+Firmware SPI veri yolunu `SPI.begin(18, 19, 23, 5)` (SCK, MISO, MOSI, CS) ile başlatır. Pinler rapordaki EK-5.1 bağlantı şemasıyla birebir aynıdır.
 
 | SD Modül Pini | ESP32-S3 GPIO | Not |
 |---|---|---|
 | GND | GND | Ortak toprak |
 | VCC | 5V | Modül USB'den beslenir |
-| MISO | GPIO 13 | SPI veri girişi |
-| MOSI | GPIO 11 | SPI veri çıkışı |
-| SCK | GPIO 12 | SPI saat sinyali |
-| CS | GPIO 10 | Chip Select (aktif-düşük) |
+| MISO | GPIO 19 | SPI veri girişi |
+| MOSI | GPIO 23 | SPI veri çıkışı |
+| SCK | GPIO 18 | SPI saat sinyali |
+| CS | GPIO 5 | Chip Select (aktif-düşük) |
 
 ## Düğüm: ESP32-WROOM ↔ JSN-SR04T ↔ Güç Zinciri
 
@@ -46,8 +44,8 @@ Firmware özel SPI başlatma yapar: `SPI.begin(12, 13, 11, 10)` (SCK, MISO, MOSI
 ### Merkez (`firmware/merkez/merkez.ino`)
 
 ```cpp
-#define SD_CS_PIN 10
-#define SD_SCK    12
-#define SD_MISO   13
-#define SD_MOSI   11
+#define SD_CS_PIN 5
+#define SD_SCK    18
+#define SD_MISO   19
+#define SD_MOSI   23
 ```

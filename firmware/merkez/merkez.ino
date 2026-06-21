@@ -4,10 +4,10 @@
 #include <esp_now.h>
 
 
-#define SD_CS_PIN 10
-#define SD_SCK 12
-#define SD_MISO 13
-#define SD_MOSI 11
+#define SD_CS_PIN 5
+#define SD_SCK 18
+#define SD_MISO 19
+#define SD_MOSI 23
 
 // SD kurtarma ayarlari
 #define SD_RETRY_COOLDOWN_MS 5000UL   // basarisiz init sonrasi tekrar denemeden once bekleme
