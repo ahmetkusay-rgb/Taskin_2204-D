@@ -8,12 +8,13 @@ import json
 import argparse
 import sys
 import os
+import math
 from datetime import datetime
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import threading
 
 # ── Ayarlar ───────────────────────────────────────────────
-SERIAL_PORT  = "COM12"   
+SERIAL_PORT  = None
 DEFAULT_BAUD = 115200
 WS_HOST      = "127.0.0.1"
 WS_PORT      = 8765
@@ -29,8 +30,6 @@ def find_esp_port():
         desc = (p.description or "").lower()
         if any(k in desc for k in ["cp210", "ch340", "usb serial", "uart", "esp"]):
             return p.device
-    if ports:
-        return ports[0].device
     return None
 
 async def broadcast(message: str):
@@ -46,6 +45,7 @@ async def serial_reader(port: str, baud: int):
     print(f"[Serial] {port} portuna bağlanılıyor ({baud} baud)...")
     
     while True:
+        ser = None
         try:
             ser = serial.Serial(port, baud, timeout=1)
             print(f"[Serial] Bağlandı: {port}")
@@ -68,12 +68,12 @@ async def serial_reader(port: str, baud: int):
                     continue
 
                 # SD kayıt bildirimi: SD_OK,node_id
-                if text.startswith("SD_OK,"):
+                if text.startswith(("SD_OK,", "SD_FAIL,")):
                     try:
                         sd_node = int(text.split(",")[1])
                         now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                         await broadcast(json.dumps({
-                            "type":    "sd_log",
+                            "type":    "sd_log" if text.startswith("SD_OK,") else "sd_error",
                             "node_id": sd_node,
                             "time":    now
                         }))
@@ -98,7 +98,7 @@ async def serial_reader(port: str, baud: int):
                 if node_id < 1 or node_id > 10:
                     print(f"[Drop] Geçersiz node_id: {node_id} (raw: {text})")
                     continue
-                if doluluk_pct < -10 or doluluk_pct > 200:
+                if not math.isfinite(doluluk_pct) or doluluk_pct < 0 or doluluk_pct > 100 or alarm not in (0, 1):
                     print(f"[Drop] Geçersiz doluluk: {doluluk_pct} (raw: {text})")
                     continue
 
@@ -126,6 +126,9 @@ async def serial_reader(port: str, baud: int):
         except Exception as e:
             print(f"[Serial] Beklenmeyen hata: {e}")
             await asyncio.sleep(3)
+        finally:
+            if ser is not None:
+                ser.close()
 
 async def ws_handler(websocket):
     """Yeni WebSocket bağlantısı"""
@@ -139,8 +142,8 @@ async def ws_handler(websocket):
         connected_clients.discard(websocket)
         print(f"[WS] İstemci ayrıldı: {addr} (toplam: {len(connected_clients)})")
 
-def start_http_server():
-    """index.html'i servis eden basit HTTP sunucusu (ayrı thread)"""
+def create_http_server():
+    """Bind before starting a thread so port conflicts fail visibly."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
     class Handler(SimpleHTTPRequestHandler):
@@ -151,11 +154,12 @@ def start_http_server():
 
     httpd = HTTPServer((WS_HOST, HTTP_PORT), Handler)
     print(f"[HTTP] Dashboard: http://{WS_HOST}:{HTTP_PORT}/index.html")
-    httpd.serve_forever()
+    return httpd
 
 async def main(port: str, baud: int):
     # HTTP sunucusunu ayrı thread'de başlat
-    http_thread = threading.Thread(target=start_http_server, daemon=True)
+    httpd = create_http_server()
+    http_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     http_thread.start()
 
     print(f"""
@@ -167,13 +171,14 @@ async def main(port: str, baud: int):
 ╚══════════════════════════════════════════╝
 """)
     
-    ws_server = await websockets.serve(ws_handler, WS_HOST, WS_PORT)
-    print(f"[WS] Sunucu başladı: ws://{WS_HOST}:{WS_PORT}")
-    
-    await asyncio.gather(
-        ws_server.wait_closed(),
-        serial_reader(port, baud)
-    )
+    try:
+        async with websockets.serve(ws_handler, WS_HOST, WS_PORT):
+            print(f"[WS] Sunucu başladı: ws://{WS_HOST}:{WS_PORT}")
+            await serial_reader(port, baud)
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        http_thread.join(timeout=2)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ESP32 Serial → WebSocket Bridge")

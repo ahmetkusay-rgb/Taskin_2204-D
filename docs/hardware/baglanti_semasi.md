@@ -6,16 +6,16 @@ TAŞKIN merkez birimi ve sensör düğümleri için pin bağlantıları. Pin num
 
 ## Merkez: ESP32-S3 ↔ Micro SD Kart Modülü
 
-Firmware SPI veri yolunu `SPI.begin(18, 19, 23, 5)` (SCK, MISO, MOSI, CS) ile başlatır. Pinler rapordaki EK-5.1 bağlantı şemasıyla birebir aynıdır.
+Firmware SPI veri yolunu `SPI.begin(12, 13, 11, 10)` (SCK, MISO, MOSI, CS) ile başlatır. ESP32-S3 için güncel bağlantı budur. Rapordan alınan eski görseldeki GPIO 23 S3 üzerinde mevcut değildir; görsel yerine bu tabloyu kullanın.
 
 | SD Modül Pini | ESP32-S3 GPIO | Not |
 |---|---|---|
 | GND | GND | Ortak toprak |
 | VCC | 5V | Modül USB'den beslenir |
-| MISO | GPIO 19 | SPI veri girişi |
-| MOSI | GPIO 23 | SPI veri çıkışı |
-| SCK | GPIO 18 | SPI saat sinyali |
-| CS | GPIO 5 | Chip Select (aktif-düşük) |
+| MISO | GPIO 13 | SPI veri girişi |
+| MOSI | GPIO 11 | SPI veri çıkışı |
+| SCK | GPIO 12 | SPI saat sinyali |
+| CS | GPIO 10 | Chip Select (aktif-düşük) |
 
 ## Düğüm: ESP32-WROOM ↔ JSN-SR04T ↔ Güç Zinciri
 
@@ -44,8 +44,14 @@ Firmware SPI veri yolunu `SPI.begin(18, 19, 23, 5)` (SCK, MISO, MOSI, CS) ile ba
 ### Merkez (`firmware/merkez/merkez.ino`)
 
 ```cpp
-#define SD_CS_PIN 5
-#define SD_SCK    18
-#define SD_MISO   19
-#define SD_MOSI   23
+#define SD_CS_PIN 10
+#define SD_SCK    12
+#define SD_MISO   13
+#define SD_MOSI   11
 ```
+
+## Montaj ve kalibrasyon
+
+`TANK_YUKSEKLIK_CM` kanalın ölçülen derinliğidir; `SENSOR_OFFSET_CM` probun tam dolu su yüzeyinden yüksekliğidir (örnek: 25 cm). Gerçek montajı ölçerek ikisini de ayarlayın. Probun kör bölgesi nedeniyle tam dolu yüzey probun hemen altında olmamalıdır. Geçersiz ölçüm gönderilmez; pano zaman aşımıyla düğümü çevrimdışı gösterir. 5 V ECHO çıkışını doğrudan ESP32 GPIO girişine bağlamayın; uygun 3,3 V seviye dönüşümü kullanın. SD modülünün besleme/lojik gereksinimini kendi modelinden doğrulayın.
+
+Kaynak: [Espressif S3 GPIO tablosu](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-reference/peripherals/gpio.html).

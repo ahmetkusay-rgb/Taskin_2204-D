@@ -7,6 +7,7 @@
 #define ECHO_PIN 18
 #define BUTTON_PIN 25
 #define TANK_YUKSEKLIK_CM 100
+#define SENSOR_OFFSET_CM 25  // Probe height above the maximum water surface
 #define ALARM_THRESHOLD 80
 
 // JSN-SR04T ayarlari
@@ -25,7 +26,7 @@ veri_paketi gonderilecek;
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 // Son gecerli doluluk - kotu okuma gelince buna geri donulur
-float sonGecerliDoluluk = 0.0;
+bool radyoHazir = false;
 
 // Tek bir mesafe olcumu. Basarisizsa -1 doner.
 long tekOlcum() {
@@ -103,31 +104,32 @@ void setup() {
     Serial.println("PEER EKLENEMEDI");
     return;
   }
+  radyoHazir = true;
 }
 
 // =======================
 void loop() {
+  unsigned long baslangic = millis();
+  if (!radyoHazir) { delay(1000); return; }
   long mesafe = mesafeOlc();
 
   float doluluk;
   if (mesafe < 0) {
-    // Olcum basarisiz -> son gecerli degeri koru, çöp uretme
-    doluluk = sonGecerliDoluluk;
-    Serial.println("OLCUM HATASI - son deger korunuyor");
+    // Do not present a stale value as a fresh measurement.
+    Serial.println("OLCUM HATASI - veri gonderilmedi");
+    delay(1000);
+    return;
   } else {
-    if (mesafe > TANK_YUKSEKLIK_CM)
-      mesafe = TANK_YUKSEKLIK_CM;
 
     // float aritmetigi - map() yerine. Bos boru = %0, dolu = %100
-    doluluk = (float)(TANK_YUKSEKLIK_CM - mesafe) / TANK_YUKSEKLIK_CM * 100.0;
+    doluluk = (float)(TANK_YUKSEKLIK_CM + SENSOR_OFFSET_CM - mesafe) / TANK_YUKSEKLIK_CM * 100.0;
 
     if (doluluk < 0)   doluluk = 0.0;
     if (doluluk > 100) doluluk = 100.0;
 
-    sonGecerliDoluluk = doluluk;
   }
 
-  int alarm = (doluluk > ALARM_THRESHOLD) ? 1 : 0;
+  int alarm = (doluluk >= ALARM_THRESHOLD) ? 1 : 0;
   if (digitalRead(BUTTON_PIN) == LOW) {
     alarm = 0;
     delay(300);
@@ -155,5 +157,6 @@ void loop() {
     Serial.println("Gonderim Hatasi");
   }
 
-  delay(1000);
+  unsigned long gecen = millis() - baslangic;
+  if (gecen < 1000) delay(1000 - gecen);
 }

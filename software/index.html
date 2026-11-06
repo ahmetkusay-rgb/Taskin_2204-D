@@ -1001,9 +1001,13 @@
       ws.onclose = () => { setWs(false); document.getElementById('statusLeft').textContent = `bağlantı kesildi — ${RECONNECT_MS / 1000}s`; setTimeout(connect, RECONNECT_MS); };
       ws.onerror = () => setWs(false);
       ws.onmessage = e => {
-        const m = JSON.parse(e.data);
+        let m;
+        try { m = JSON.parse(e.data); } catch { return; }
+        if (!m || typeof m !== "object") return;
         if (m.type === 'data') handleData(m);
-        if (m.type === 'sd_log') handleSdLog(m);
+        if (m.type === 'sd_log' && Number.isInteger(m.node_id) && m.node_id >= 1 && m.node_id <= 3) handleSdLog(m);
+        if (m.type === 'sd_error') document.getElementById('statusLeft').textContent = 'SD kayıt hatası';
+        if (m.type === 'status') document.getElementById('statusLeft').textContent = m.serial === 'connected' ? 'Seri port bağlı' : 'Seri port bağlantısı kesildi';
       };
     }
 
@@ -1015,6 +1019,7 @@
     // ── Veri işle ─────────────────────────────────────────────
     function handleData(msg) {
       const { node_id: id, time } = msg;
+      if (!Number.isInteger(id) || id < 1 || id > 3 || !Number.isFinite(msg.doluluk_pct)) return;
       let pct = msg.doluluk_pct ?? 0;  // distance_cm fallback kaldırıldı
       pct = Math.max(0, Math.min(100, pct));  // 0-100 arası sınırla
       const alm = msg.alarm ?? 0;
@@ -1059,12 +1064,16 @@
       const stream = document.getElementById('logStream');
       const row = document.createElement('div');
       row.className = `log-row n${id}`;
-      row.innerHTML = `
-    <span class="log-time">${time}</span>
-    <span class="log-node">N${id}</span>
-    <span class="log-pct">${pct.toFixed(1)}%</span>
-    <span class="log-alm ${alm ? 'alarm' : ''}">${alm ? '⚠ ALARM' : '—'}</span>
-  `;
+      const cells = [
+        ['log-time', String(time ?? '')], ['log-node', `N${id}`],
+        ['log-pct', `${pct.toFixed(1)}%`], ['log-alm' + (alm ? ' alarm' : ''), alm ? '⚠ ALARM' : '—']
+      ];
+      for (const [className, text] of cells) {
+        const span = document.createElement('span');
+        span.className = className;
+        span.textContent = text;
+        row.appendChild(span);
+      }
       stream.insertBefore(row, stream.firstChild);
       while (stream.children.length > MAX_LOG_ROWS) stream.removeChild(stream.lastChild);
     }

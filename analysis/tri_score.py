@@ -64,35 +64,36 @@ def load_all_csv(data_dir):
     if not files:
         raise FileNotFoundError(f"No CSV files found in: {data_dir}")
     frames = []
-    for f in files:
-        df = pd.read_csv(f)
+    for filename in sorted(files):
+        df = pd.read_csv(filename)
         df.columns = df.columns.str.strip()
+        if "doluluk" not in df and "doluluk_pct" in df:
+            df = df.rename(columns={"doluluk_pct": "doluluk"})
+        if not {"node_id", "doluluk"}.issubset(df.columns):
+            raise ValueError(f"Missing node_id/doluluk columns: {filename}")
+        df["node_id"] = pd.to_numeric(df["node_id"].astype(str).str.extract(r"(\d+)")[0], errors="coerce")
+        df["doluluk"] = pd.to_numeric(df["doluluk"], errors="coerce")
+        if "timestamp" in df:
+            ts = pd.to_datetime(df["timestamp"], errors="coerce", utc=True)
+            df["zaman_ms"] = ts.map(lambda t: t.timestamp() * 1000 if pd.notna(t) else np.nan)
+        elif "zaman_ms" in df:
+            df["zaman_ms"] = pd.to_numeric(df["zaman_ms"], errors="coerce")
+        else:
+            raise ValueError(f"Missing timestamp/zaman_ms: {filename}")
+        # Separate files and clock resets are separate acquisition sessions.
+        resets = df.groupby("node_id")["zaman_ms"].diff().lt(0).cumsum()
+        df["session"] = os.path.basename(filename) + ":" + resets.astype(str)
+        if "durum" in df:
+            df = df.loc[df["durum"].astype(str).str.upper() != "KAYIP"]
+        df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=["node_id", "doluluk", "zaman_ms"])
+        df = df.loc[df["doluluk"].between(0, 100) & df["node_id"].between(1, 10)]
+        df["node_id"] = df["node_id"].astype(int)
+        df = df.drop_duplicates(["session", "node_id", "zaman_ms"], keep="last")
         frames.append(df)
-    df = pd.concat(frames, ignore_index=True)
-
-    if "doluluk_pct" in df.columns and "doluluk" not in df.columns:
-        df = df.rename(columns={"doluluk_pct": "doluluk"})
-    if "node_id" in df.columns:
-        df["node_id"] = df["node_id"].astype(str).str.extract(r"(\d+)")
-
-    df["node_id"] = pd.to_numeric(df["node_id"], errors="coerce")
-    df["doluluk"] = pd.to_numeric(df["doluluk"], errors="coerce")
-    df = df.dropna(subset=["node_id", "doluluk"])           # drops durum=KAYIP rows
-    df["node_id"] = df["node_id"].astype(int)
-    df["doluluk"] = df["doluluk"].astype(float).clip(0, 100)
-
-    # Time axis: prefer the real timestamp; cast to ms explicitly because pandas
-    # may parse to s/us/ns and astype("int64") units are otherwise not portable.
-    if "timestamp" in df.columns:
-        ts = pd.to_datetime(df["timestamp"], errors="coerce")
-        df = df.loc[ts.notna()].copy()
-        df["zaman_ms"] = ts.loc[ts.notna()].astype("datetime64[ms]").astype("int64").astype(float).values
-    elif "zaman_ms" in df.columns:
-        df["zaman_ms"] = pd.to_numeric(df["zaman_ms"], errors="coerce")
-        df = df.dropna(subset=["zaman_ms"])
-    else:
-        df["zaman_ms"] = df.groupby("node_id").cumcount() * 1000.0
-    return df
+    result = pd.concat(frames, ignore_index=True)
+    if result.empty:
+        raise ValueError("No valid measurements remain after validation")
+    return result
 
 # ── Metrics ───────────────────────────────────────────────────────────────────
 
@@ -127,16 +128,29 @@ def _peak_rise_rate(fill, t_s, window_s=RISE_WINDOW_S):
 def compute_metrics(df):
     results = {}
     for node_id, group in df.groupby("node_id"):
-        group = group.sort_values("zaman_ms")
-        fill = group["doluluk"].values
-        t_s  = group["zaman_ms"].values / 1000.0
+        fill = group["doluluk"].to_numpy()
         n = len(fill)
+        exposure = 0.0
+        crossings = 0
+        peak = 0.0
+        sessions = group.groupby("session") if "session" in group else [("single", group)]
+        for _, session in sessions:
+            session = session.sort_values("zaman_ms")
+            values = session["doluluk"].to_numpy()
+            times = session["zaman_ms"].to_numpy() / 1000.0
+            dt = np.diff(times)
+            contiguous = (dt > 0) & (dt <= GAP_S)
+            high = values >= ALARM_THRESHOLD
+            # Left-sample hold only over observed contiguous intervals.
+            exposure += float(np.sum(dt[contiguous & high[:-1]]))
+            crossings += int(np.sum(contiguous & ~high[:-1] & high[1:]))
+            peak = max(peak, _peak_rise_rate(values, times))
         results[node_id] = {
             "O": float(np.mean(fill)),                                            # mean fill
             "M": float(np.max(fill)),                                             # max fill
-            "E": int(np.sum(fill >= ALARM_THRESHOLD)),                            # seconds >= 80%
-            "F": int(np.sum(np.diff((fill >= ALARM_THRESHOLD).astype(int)) > 0)), # 80% up-crossings
-            "A": _peak_rise_rate(fill, t_s),                                      # peak rise %/min
+            "E": exposure,                            # seconds >= 80%
+            "F": crossings, # 80% up-crossings
+            "A": peak,                                      # peak rise %/min
             "std": float(np.std(fill)),
             "pct_above_60": 100.0 * np.sum(fill >= HIGH_THRESHOLD) / n,
             "n": n,
@@ -154,6 +168,8 @@ def minmax(values):
 
 
 def compute_tri(metrics, method="hybrid"):
+    if not metrics:
+        raise ValueError("No node metrics to score")
     keys = sorted(metrics)
     raw = {p: {k: metrics[k][p] for k in keys} for p in ("O", "M", "E", "F", "A")}
 
@@ -193,10 +209,19 @@ def generate_chart(df, out_path):
     fig.patch.set_facecolor("#0a0c0f")
     ax.set_facecolor("#0f1217")
 
-    for node_id, group in df.sort_values("zaman_ms").groupby("node_id"):
-        t = (group["zaman_ms"].values - group["zaman_ms"].values[0]) / 1000.0
-        ax.plot(t, group["doluluk"].values, color=NODE_COLORS.get(node_id, "#aaaaaa"),
-                linewidth=1.2, alpha=0.85, label=NODE_LABELS.get(node_id, f"Node {node_id}"))
+    for node_id, group in df.groupby("node_id"):
+        sessions = group.groupby("session") if "session" in group else [("single", group)]
+        for session_name, session in sessions:
+            session = session.sort_values("zaman_ms")
+            t = (session["zaman_ms"].to_numpy() - session["zaman_ms"].iloc[0]) / 1000.0
+            values = session["doluluk"].to_numpy(dtype=float).copy()
+            # NaN separators prevent the plot from implying data in missing intervals.
+            breaks = np.where(np.diff(t) > GAP_S)[0] + 1
+            plot_t = np.insert(t, breaks, np.nan)
+            plot_values = np.insert(values, breaks, np.nan)
+            ax.plot(plot_t, plot_values, color=NODE_COLORS.get(node_id, "#aaaaaa"),
+                    linewidth=1.2, alpha=0.85,
+                    label=f"{NODE_LABELS.get(node_id, f'Node {node_id}')} / {session_name}")
 
     ax.axhline(80, color="#ff2244", linewidth=0.8, linestyle="--", alpha=0.7, label="80% Alarm threshold")
     ax.axhline(60, color="#ff8800", linewidth=0.8, linestyle=":",  alpha=0.5, label="60% High threshold")
@@ -211,7 +236,7 @@ def generate_chart(df, out_path):
     ax.legend(facecolor="#0f1217", edgecolor="#1e2530", labelcolor="#c8d4e0", fontsize=9)
     ax.grid(axis="y", color="#1e2530", linewidth=0.5)
 
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, facecolor=fig.get_facecolor())
     plt.close()
@@ -225,12 +250,13 @@ def main():
                         help="Normalization scheme (default: hybrid)")
     parser.add_argument("--chart", action="store_true", help="Generate fill-rate chart")
     parser.add_argument("--out", default=DEFAULT_OUT, help="Chart output path (PNG)")
+    parser.add_argument("--data-dir", default=DATA_DIR, help="Directory containing session CSV files")
     args = parser.parse_args()
 
     print("TAŞKIN Risk İndeksi (TRİ) Calculator")
     print("=" * 64)
 
-    df = load_all_csv(DATA_DIR)
+    df = load_all_csv(args.data_dir)
     print(f"Loaded {len(df):,} records from {df['node_id'].nunique()} node(s).\n")
 
     metrics = compute_metrics(df)
@@ -241,7 +267,7 @@ def main():
     for nid in sorted(metrics):
         m = metrics[nid]
         print(f"{NODE_LABELS.get(nid, 'Node '+str(nid)):<26} "
-              f"{m['O']:>8.1f} {m['M']:>7.1f} {m['E']:>7d} {m['F']:>6d} {m['A']:>8.1f}")
+              f"{m['O']:>8.1f} {m['M']:>7.1f} {m['E']:>7.1f} {m['F']:>6d} {m['A']:>8.1f}")
 
     tri = compute_tri(metrics, method=args.method)
     print(f"\nTRİ Scores — {args.method} normalization, equal weights:")

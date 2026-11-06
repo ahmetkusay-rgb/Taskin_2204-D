@@ -2,12 +2,15 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <esp_now.h>
+#include <math.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 
 
-#define SD_CS_PIN 5
-#define SD_SCK 18
-#define SD_MISO 19
-#define SD_MOSI 23
+#define SD_CS_PIN 10
+#define SD_SCK 12
+#define SD_MISO 13
+#define SD_MOSI 11
 
 // SD kurtarma ayarlari
 #define SD_RETRY_COOLDOWN_MS 5000UL   // basarisiz init sonrasi tekrar denemeden once bekleme
@@ -19,6 +22,7 @@ typedef struct {
   float doluluk;
   int alarm;
 } veri_paketi;
+QueueHandle_t paketKuyrugu = nullptr;
 
 // SD durumu - kart cikar/takilirsa veya yazma duserse kurtarma icin izlenir
 bool sdHazir = false;
@@ -36,8 +40,9 @@ bool sdBaslat() {
     if (!dosya) {
       return false;
     }
-    dosya.println(LOG_BASLIK);
+    size_t yazilan = dosya.println(LOG_BASLIK);
     dosya.close();
+    if (yazilan == 0) return false;
   }
   return true;
 }
@@ -66,9 +71,12 @@ bool sdSatirYaz(int node_id, float doluluk, int alarm) {
     return false;
   }
   unsigned long zaman = millis();
-  dosya.printf("%lu,%d,%.1f,%d\n", zaman, node_id, doluluk, alarm);
+  char satir[80];
+  int uzunluk = snprintf(satir, sizeof(satir), "%lu,%d,%.1f,%d\n", zaman, node_id, doluluk, alarm);
+  size_t yazilan = dosya.print(satir);
   dosya.close();
-  return true;
+  if (yazilan != (size_t)uzunluk) sdHazir = false;
+  return sdHazir;
 }
 
 void sdKartaYaz(int node_id, float doluluk, int alarm) {
@@ -85,7 +93,7 @@ void sdKartaYaz(int node_id, float doluluk, int alarm) {
     Serial.printf("SD_OK,%d\n", node_id);
   } else {
     // Yazma dustu -> aninda bir kez kurtarip tekrar dene
-    sonSdDeneme = 0;   // cooldown'i atla, hemen dene
+    sonSdDeneme = millis() - SD_RETRY_COOLDOWN_MS;
     sdKurtarmaDene();
     if (sdHazir && sdSatirYaz(node_id, doluluk, alarm)) {
       Serial.printf("SD_OK,%d\n", node_id);
@@ -106,6 +114,8 @@ void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
 
   if (gelen.node_id < 1 || gelen.node_id > 10)
     return;
+  if (!isfinite(gelen.doluluk) || gelen.doluluk < 0 || gelen.doluluk > 100)
+    return;
 
   gelen.doluluk = constrain(gelen.doluluk, 0.0f, 100.0f);
 
@@ -113,13 +123,17 @@ void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
     gelen.alarm = 0;
 
 
-  Serial.printf("%d,%.1f,%d\n", gelen.node_id, gelen.doluluk, gelen.alarm);
-
-  sdKartaYaz(gelen.node_id, gelen.doluluk, gelen.alarm);
+  // Wi-Fi callback must not block on serial output or SD writes.
+  xQueueSend(paketKuyrugu, &gelen, 0);
 }
 
 void setup() {
   Serial.begin(115200);
+  paketKuyrugu = xQueueCreate(32, sizeof(veri_paketi));
+  if (!paketKuyrugu) {
+    Serial.println("QUEUE_INIT_FAILED");
+    return;
+  }
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
@@ -147,5 +161,11 @@ void loop() {
   if (!sdHazir)
     sdKurtarmaDene();
 
-  delay(1000);
+  veri_paketi gelen;
+  if (paketKuyrugu && xQueueReceive(paketKuyrugu, &gelen, pdMS_TO_TICKS(20)) == pdTRUE) {
+    Serial.printf("%d,%.1f,%d\n", gelen.node_id, gelen.doluluk, gelen.alarm);
+    sdKartaYaz(gelen.node_id, gelen.doluluk, gelen.alarm);
+  } else {
+    delay(1);
+  }
 }
